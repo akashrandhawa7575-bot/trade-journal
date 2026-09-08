@@ -1,0 +1,22 @@
+{
+  "trades": [
+    {
+      "id": "mtsxuwgedbogv",
+      "date": "2026-09-08",
+      "pair": "eurusd",
+      "direction": "Buy",
+      "session": "London",
+      "entry": 123,
+      "exit": 123,
+      "sl": 123,
+      "tp": 123,
+      "rr": null,
+      "lots": 123,
+      "pnl": 123,
+      "strategy": "",
+      "emotion": "Confident",
+      "notes": "",
+      "createdAt": 1788888219854
+    }
+  ]
+}
