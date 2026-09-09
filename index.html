@@ -240,6 +240,10 @@ tbody tr:hover td{background:var(--surface-2);}
         <span class="brand-sub" id="repo-label"></span>
       </div>
     </div>
+    <div style="padding:0 10px 14px;">
+      <label class="field-label" style="margin-bottom:5px;">Account</label>
+      <select id="account-switcher"></select>
+    </div>
     <nav class="nav">
       <button class="nav-item active" data-tab="overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/></svg>
@@ -317,6 +321,11 @@ tbody tr:hover td{background:var(--surface-2);}
           <svg class="equity-svg" id="equity-svg" viewBox="0 0 700 150" preserveAspectRatio="none"></svg>
         </div>
 
+        <div class="panel" id="ov-by-account-panel" style="display:none;">
+          <div class="panel-title">By account</div>
+          <div id="ov-by-account"></div>
+        </div>
+
         <div class="panel">
           <div class="panel-title">Recent trades</div>
           <div id="ov-recent-wrap"></div>
@@ -328,6 +337,10 @@ tbody tr:hover td{background:var(--surface-2);}
         <div class="panel" style="max-width:640px;">
           <div class="panel-title" id="log-panel-title">Log a trade</div>
           <div class="form-grid">
+            <div>
+              <label class="field-label">Account</label>
+              <select id="f-account"></select>
+            </div>
             <div>
               <label class="field-label">Date</label>
               <input type="date" id="f-date">
@@ -399,6 +412,7 @@ tbody tr:hover td{background:var(--surface-2);}
       <!-- HISTORY -->
       <div class="tab-content" id="tab-history">
         <div class="filter-row">
+          <select id="hist-filter-account"><option value="">All accounts</option></select>
           <select id="hist-filter-pair"><option value="">All pairs</option></select>
           <select id="hist-filter-result">
             <option value="">All results</option>
@@ -410,7 +424,7 @@ tbody tr:hover td{background:var(--surface-2);}
           <table id="history-table">
             <thead>
               <tr>
-                <th>Date</th><th class="name-cell">Pair</th><th>Dir</th>
+                <th>Date</th><th class="name-cell">Account</th><th class="name-cell">Pair</th><th>Dir</th>
                 <th class="num">Entry</th><th class="num">Exit</th><th class="num">Lots</th>
                 <th class="num">P&amp;L</th><th class="name-cell">Emotion</th><th></th>
               </tr>
@@ -454,6 +468,22 @@ tbody tr:hover td{background:var(--surface-2);}
 
       <!-- SETTINGS -->
       <div class="tab-content" id="tab-settings">
+        <div class="panel" style="max-width:520px;">
+          <div class="panel-title">Accounts</div>
+          <div id="accounts-list"></div>
+          <div class="form-grid" style="margin-top:14px;">
+            <div>
+              <label class="field-label">New account name</label>
+              <input id="acc-new-name" placeholder="e.g. Prop Firm A">
+            </div>
+            <div>
+              <label class="field-label">Starting capital ($)</label>
+              <input type="number" step="any" id="acc-new-capital" placeholder="10000">
+            </div>
+          </div>
+          <button class="btn btn-accent" id="acc-add-btn" style="margin-top:12px;">+ Add account</button>
+        </div>
+
         <div class="panel" style="max-width:520px;">
           <div class="panel-title">Connection</div>
           <div class="row-flex"><span>Repository</span><span id="set-repo" style="font-family:var(--font-mono);"></span></div>
