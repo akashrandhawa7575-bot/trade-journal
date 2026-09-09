@@ -177,6 +177,16 @@ tbody tr:hover td{background:var(--surface-2);}
 .insight-list li{font-size:13px;color:var(--text-secondary);display:flex;gap:9px;line-height:1.5;}
 .insight-list li svg{flex-shrink:0;margin-top:2px;color:var(--accent);width:15px;height:15px;}
 
+/* account list in settings */
+.account-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;
+}
+.account-row:last-child{border-bottom:none;}
+.account-row-info{display:flex;flex-direction:column;gap:2px;}
+.account-row-name{font-weight:500;}
+.account-row-meta{font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);}
+
 @media(max-width:700px){
   .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .18s;z-index:20;}
   .sidebar.open{transform:translateX(0);}
@@ -470,6 +480,7 @@ tbody tr:hover td{background:var(--surface-2);}
       <div class="tab-content" id="tab-settings">
         <div class="panel" style="max-width:520px;">
           <div class="panel-title">Accounts</div>
+          <!-- FIX: accounts list renders here -->
           <div id="accounts-list"></div>
           <div class="form-grid" style="margin-top:14px;">
             <div>
@@ -486,9 +497,9 @@ tbody tr:hover td{background:var(--surface-2);}
 
         <div class="panel" style="max-width:520px;">
           <div class="panel-title">Connection</div>
-          <div class="row-flex"><span>Repository</span><span id="set-repo" style="font-family:var(--font-mono);"></span></div>
+          <div class="row-flex"><span>Repository</span><span id="set-repo" style="font-family:var(--font-mono);font-size:12px;"></span></div>
           <div class="row-flex"><span>Branch</span><span id="set-branch" style="font-family:var(--font-mono);"></span></div>
-          <div class="row-flex"><span>Data file</span><span id="set-path" style="font-family:var(--font-mono);"></span></div>
+          <div class="row-flex"><span>Data file</span><span id="set-path" style="font-family:var(--font-mono);font-size:12px;"></span></div>
           <div class="row-flex"><span>Trades stored</span><span id="set-count" style="font-family:var(--font-mono);"></span></div>
           <button class="btn" id="resync-btn" style="margin-top:14px;">Force re-sync from GitHub</button>
           <button class="btn btn-ghost" id="disconnect-btn" style="margin-top:8px;color:var(--danger);">Disconnect this device</button>
@@ -502,15 +513,13 @@ tbody tr:hover td{background:var(--surface-2);}
 <script>
 /* ============================================================
    Ledger — GitHub-backed trade journal
-   Data lives at <owner>/<repo>/<path> as a JSON file, read and
-   written through the GitHub Contents API. The PAT is kept only
-   in this browser's localStorage.
    ============================================================ */
 
 const LS_CFG = 'ledger_cfg_v1';
-let cfg = null;          // {owner, repo, branch, path, token}
-let store = {trades:[]}; // in-memory data
-let fileSha = null;      // GitHub blob sha, needed to update the file
+let cfg = null;
+// FIX: store now initialises accounts array
+let store = { trades: [], accounts: [] };
+let fileSha = null;
 let editingId = null;
 let selectedEmotion = null;
 
@@ -538,10 +547,10 @@ function boot(){
 /* ---------------- unicode-safe base64 ---------------- */
 function b64Encode(str){
   return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-    (m,p1)=>String.fromCharCode('0x'+p1)));
+    (m,p1) => String.fromCharCode('0x'+p1)));
 }
 function b64Decode(str){
-  return decodeURIComponent(atob(str.replace(/\n/g,'')).split('').map(c=>
+  return decodeURIComponent(atob(str.replace(/\n/g,'')).split('').map(c =>
     '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
 }
 
@@ -570,7 +579,7 @@ async function loadFromGitHub(){
   try{
     const res = await ghRequest('GET');
     if(res.status === 404){
-      store = {trades:[]};
+      store = { trades: [], accounts: [] };
       fileSha = null;
       setSync('ok','no data yet');
       renderAll();
@@ -580,8 +589,10 @@ async function loadFromGitHub(){
     const json = await res.json();
     fileSha = json.sha;
     const text = b64Decode(json.content);
-    store = JSON.parse(text || '{"trades":[]}');
+    store = JSON.parse(text || '{"trades":[],"accounts":[]}');
+    // FIX: guard both arrays in case file predates accounts feature
     if(!Array.isArray(store.trades)) store.trades = [];
+    if(!Array.isArray(store.accounts)) store.accounts = [];
     setSync('ok','synced');
     renderAll();
   } catch(e){
@@ -607,7 +618,7 @@ async function doSave(){
     if(fileSha) body.sha = fileSha;
     const res = await ghRequest('PUT', body);
     if(!res.ok){
-      const errJson = await res.json().catch(()=>({}));
+      const errJson = await res.json().catch(() => ({}));
       throw new Error(errJson.message || ('GitHub error ' + res.status));
     }
     const json = await res.json();
@@ -620,13 +631,13 @@ async function doSave(){
 }
 
 /* ---------------- setup screen ---------------- */
-$('#cfg-connect')?.addEventListener('click', async () => {
+$('#cfg-connect').addEventListener('click', async () => {
   const owner = $('#cfg-owner').value.trim();
-  const repo = $('#cfg-repo').value.trim();
+  const repo  = $('#cfg-repo').value.trim();
   const branch = $('#cfg-branch').value.trim() || 'main';
-  const path = $('#cfg-path').value.trim() || 'data/trades.json';
-  const token = $('#cfg-token').value.trim();
-  const errEl = $('#cfg-error');
+  const path   = $('#cfg-path').value.trim() || 'data/trades.json';
+  const token  = $('#cfg-token').value.trim();
+  const errEl  = $('#cfg-error');
   errEl.classList.remove('show');
 
   if(!owner || !repo || !token){
@@ -655,7 +666,7 @@ $('#cfg-connect')?.addEventListener('click', async () => {
 /* ---------------- nav ---------------- */
 $$('.nav-item').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 $$('[data-goto]').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.goto)));
-$('#menu-toggle')?.addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#menu-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
 const TAB_TITLES = {overview:'Overview', log:'New trade', history:'History', analytics:'Analytics', mindset:'Mindset', settings:'Settings'};
 function switchTab(tab){
@@ -667,13 +678,117 @@ function switchTab(tab){
 }
 
 /* ---------------- emotion chips ---------------- */
-$('#f-emotion-group')?.addEventListener('click', (e) => {
+$('#f-emotion-group').addEventListener('click', (e) => {
   const chip = e.target.closest('.chip');
   if(!chip) return;
   $$('#f-emotion-group .chip').forEach(c => c.classList.remove('selected'));
   chip.classList.add('selected');
   selectedEmotion = chip.dataset.emotion;
 });
+
+/* ---------------- accounts ---------------- */
+
+// FIX: populate all three account dropdowns consistently
+function populateAccountSelects(preferValue){
+  const accounts = store.accounts;
+  const opts = accounts.length
+    ? accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('')
+    : '<option value="">— no accounts yet —</option>';
+
+  // sidebar switcher
+  const switcher = $('#account-switcher');
+  const switcherVal = switcher.value;
+  switcher.innerHTML = '<option value="">All accounts</option>' + opts;
+  switcher.value = switcherVal || '';
+
+  // new-trade form account select
+  const fAcc = $('#f-account');
+  const fVal = preferValue || fAcc.value;
+  fAcc.innerHTML = opts || '<option value="">— add an account first —</option>';
+  if(fVal) fAcc.value = fVal;
+
+  // history filter
+  const hAcc = $('#hist-filter-account');
+  const hVal = hAcc.value;
+  hAcc.innerHTML = '<option value="">All accounts</option>' + opts;
+  hAcc.value = hVal || '';
+}
+
+// FIX: render account list in Settings panel
+function renderAccountsList(){
+  const list = $('#accounts-list');
+  if(!store.accounts.length){
+    list.innerHTML = `<div style="font-size:13px;color:var(--text-muted);padding:10px 0;">No accounts yet. Add one below.</div>`;
+    return;
+  }
+  list.innerHTML = store.accounts.map(a => {
+    const tradePnl = store.trades
+      .filter(t => t.account === a.id)
+      .reduce((s, t) => s + t.pnl, 0);
+    const tradeCount = store.trades.filter(t => t.account === a.id).length;
+    const net = (a.capital || 0) + tradePnl;
+    return `
+      <div class="account-row">
+        <div class="account-row-info">
+          <span class="account-row-name">${escapeHtml(a.name)}</span>
+          <span class="account-row-meta">Capital: $${fmtNum(a.capital || 0)} &nbsp;|&nbsp; ${tradeCount} trade${tradeCount===1?'':'s'} &nbsp;|&nbsp; Net: <span class="${tradePnl>=0?'pos-txt':'neg-txt'}">$${fmtNum(net)}</span></span>
+        </div>
+        <button class="btn-danger-text" onclick="deleteAccount('${a.id}')">Remove</button>
+      </div>`;
+  }).join('');
+}
+
+// FIX: add account handler (was missing entirely)
+$('#acc-add-btn').addEventListener('click', () => {
+  const name = $('#acc-new-name').value.trim();
+  const capital = parseFloat($('#acc-new-capital').value) || 0;
+  if(!name){
+    alert('Enter an account name.');
+    return;
+  }
+  if(store.accounts.find(a => a.name.toLowerCase() === name.toLowerCase())){
+    alert('An account with that name already exists.');
+    return;
+  }
+  const id = 'acc_' + Date.now().toString(36);
+  store.accounts.push({ id, name, capital, createdAt: Date.now() });
+  $('#acc-new-name').value = '';
+  $('#acc-new-capital').value = '';
+  saveToGitHub();
+  renderAll();
+});
+
+function deleteAccount(id){
+  const acc = store.accounts.find(a => a.id === id);
+  if(!acc) return;
+  const tradeCount = store.trades.filter(t => t.account === id).length;
+  const msg = tradeCount
+    ? `Remove "${acc.name}"? It has ${tradeCount} trade(s) linked to it. The trades will remain but lose their account link.`
+    : `Remove account "${acc.name}"?`;
+  if(!confirm(msg)) return;
+  store.accounts = store.accounts.filter(a => a.id !== id);
+  // unlink trades that belonged to this account
+  store.trades.forEach(t => { if(t.account === id) t.account = null; });
+  saveToGitHub();
+  renderAll();
+}
+
+// FIX: account switcher in sidebar filters overview
+$('#account-switcher').addEventListener('change', renderOverview);
+$('#hist-filter-account').addEventListener('change', renderHistory);
+
+/* ---------------- helpers ---------------- */
+function fmtMoney(n){
+  const sign = n >= 0 ? '+' : '-';
+  return sign + '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits:2});
+}
+function fmtNum(n){
+  return Number(n).toLocaleString(undefined, {maximumFractionDigits:2});
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function emptyState(msg){ return `<div class="empty">${msg}</div>`; }
 
 /* ---------------- form ---------------- */
 function resetForm(){
@@ -686,28 +801,33 @@ function resetForm(){
   $('#f-dir').value = 'Buy';
   $('#f-session').value = 'London';
   $$('#f-emotion-group .chip').forEach(c => c.classList.remove('selected'));
+  // keep selected account from sidebar switcher as default
+  const switcherAcc = $('#account-switcher').value;
+  populateAccountSelects(switcherAcc || null);
 }
 
 $('#cancel-edit-btn').addEventListener('click', () => { resetForm(); switchTab('history'); });
 
 $('#save-trade-btn').addEventListener('click', () => {
   const pair = $('#f-pair').value.trim();
-  const pnl = parseFloat($('#f-pnl').value);
+  const pnl  = parseFloat($('#f-pnl').value);
   if(!pair || isNaN(pnl)){
     alert('Pair and P&L are required.');
     return;
   }
   const entry = parseFloat($('#f-entry').value) || null;
-  const exit = parseFloat($('#f-exit').value) || null;
-  const sl = parseFloat($('#f-sl').value) || null;
-  const tp = parseFloat($('#f-tp').value) || null;
+  const exit  = parseFloat($('#f-exit').value)  || null;
+  const sl    = parseFloat($('#f-sl').value)    || null;
+  const tp    = parseFloat($('#f-tp').value)    || null;
   let rr = null;
   if(entry !== null && sl !== null && tp !== null && entry !== sl){
     rr = Math.abs(tp - entry) / Math.abs(entry - sl);
   }
+  const accountId = $('#f-account').value || null;
   const trade = {
     id: editingId || (Date.now().toString(36) + Math.random().toString(36).slice(2,7)),
     date: $('#f-date').value || new Date().toISOString().slice(0,10),
+    account: accountId,
     pair, direction: $('#f-dir').value, session: $('#f-session').value,
     entry, exit, sl, tp, rr,
     lots: parseFloat($('#f-lots').value) || null,
@@ -734,18 +854,19 @@ function editTrade(id){
   editingId = id;
   $('#log-panel-title').textContent = 'Edit trade';
   $('#cancel-edit-btn').style.display = 'inline-flex';
-  $('#f-date').value = t.date;
-  $('#f-pair').value = t.pair;
-  $('#f-dir').value = t.direction;
+  populateAccountSelects(t.account || null);
+  $('#f-date').value    = t.date;
+  $('#f-pair').value    = t.pair;
+  $('#f-dir').value     = t.direction;
   $('#f-session').value = t.session;
-  $('#f-entry').value = t.entry ?? '';
-  $('#f-exit').value = t.exit ?? '';
-  $('#f-sl').value = t.sl ?? '';
-  $('#f-tp').value = t.tp ?? '';
-  $('#f-lots').value = t.lots ?? '';
-  $('#f-pnl').value = t.pnl;
+  $('#f-entry').value   = t.entry  ?? '';
+  $('#f-exit').value    = t.exit   ?? '';
+  $('#f-sl').value      = t.sl     ?? '';
+  $('#f-tp').value      = t.tp     ?? '';
+  $('#f-lots').value    = t.lots   ?? '';
+  $('#f-pnl').value     = t.pnl;
   $('#f-strategy').value = t.strategy || '';
-  $('#f-notes').value = t.notes || '';
+  $('#f-notes').value   = t.notes || '';
   selectedEmotion = t.emotion;
   $$('#f-emotion-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.emotion === t.emotion));
   switchTab('log');
@@ -760,13 +881,18 @@ function deleteTrade(id){
 
 /* ---------------- render: overview ---------------- */
 function renderOverview(){
-  const trades = store.trades;
+  // FIX: respect account switcher filter
+  const filterAccId = $('#account-switcher').value;
+  const trades = filterAccId
+    ? store.trades.filter(t => t.account === filterAccId)
+    : store.trades;
+
   const totalPnl = trades.reduce((s,t) => s + t.pnl, 0);
-  const wins = trades.filter(t => t.pnl > 0).length;
-  const winRate = trades.length ? Math.round(wins/trades.length*100) : 0;
+  const wins     = trades.filter(t => t.pnl > 0).length;
+  const winRate  = trades.length ? Math.round(wins/trades.length*100) : 0;
 
   $('#ov-pnl').textContent = fmtMoney(totalPnl);
-  $('#ov-pnl').className = 'stat-value ' + (totalPnl >= 0 ? 'pos' : 'neg');
+  $('#ov-pnl').className   = 'stat-value ' + (totalPnl >= 0 ? 'pos' : 'neg');
   $('#ov-pnl-sub').textContent = trades.length + ' trade' + (trades.length===1?'':'s') + ' total';
   $('#ov-winrate').textContent = winRate + '%';
   $('#ov-winrate-sub').textContent = wins + ' of ' + trades.length + ' trades';
@@ -782,15 +908,35 @@ function renderOverview(){
     else break;
   }
   $('#ov-streak').textContent = trades.length ? (streak + (streakType ? ' win' : ' loss') + (streak===1?'':'es')) : '—';
-  $('#ov-streak').className = 'stat-value ' + (trades.length ? (streakType ? 'pos' : 'neg') : '');
+  $('#ov-streak').className   = 'stat-value ' + (trades.length ? (streakType ? 'pos' : 'neg') : '');
   $('#ov-streak-sub').textContent = trades.length ? 'in a row' : 'no trades yet';
 
   renderEquityCurve(trades);
 
-  const wrap = $('#ov-recent-wrap');
+  // FIX: by-account panel — only show when viewing all accounts
+  const accPanel = $('#ov-by-account-panel');
+  if(!filterAccId && store.accounts.length > 1){
+    accPanel.style.display = '';
+    const byAcc = {};
+    store.accounts.forEach(a => { byAcc[a.id] = {name: a.name, pnl: 0, n: 0}; });
+    store.trades.forEach(t => {
+      if(t.account && byAcc[t.account]){
+        byAcc[t.account].pnl += t.pnl;
+        byAcc[t.account].n++;
+      }
+    });
+    $('#ov-by-account').innerHTML = Object.values(byAcc).map(a =>
+      `<div class="row-flex"><span>${escapeHtml(a.name)}</span>
+       <span class="${a.pnl>=0?'pos-txt':'neg-txt'}" style="font-family:var(--font-mono);">${fmtMoney(a.pnl)} <span style="color:var(--text-muted);font-size:12px;">(${a.n})</span></span></div>`
+    ).join('');
+  } else {
+    accPanel.style.display = 'none';
+  }
+
+  const wrap   = $('#ov-recent-wrap');
   const recent = [...trades].reverse().slice(0,6);
   if(!recent.length){ wrap.innerHTML = emptyState('No trades logged yet.'); return; }
-  wrap.innerHTML = simpleTable(recent, false);
+  wrap.innerHTML = simpleTable(recent);
 }
 
 function renderEquityCurve(trades){
@@ -818,15 +964,19 @@ function renderEquityCurve(trades){
   `;
 }
 
+// FIX: simpleTable now shows Account column
 function simpleTable(trades){
-  let rows = trades.map(t => `
-    <tr>
+  const rows = trades.map(t => {
+    const acc = store.accounts.find(a => a.id === t.account);
+    return `<tr>
       <td>${t.date}</td>
+      <td class="name-cell">${acc ? escapeHtml(acc.name) : '—'}</td>
       <td class="name-cell">${escapeHtml(t.pair)}</td>
       <td><span class="badge ${t.direction==='Buy'?'badge-buy':'badge-sell'}">${t.direction}</span></td>
       <td class="num ${t.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(t.pnl)}</td>
-    </tr>`).join('');
-  return `<table><tbody>${rows}</tbody></table>`;
+    </tr>`;
+  }).join('');
+  return `<table><thead><tr><th>Date</th><th class="name-cell">Account</th><th class="name-cell">Pair</th><th>Dir</th><th class="num">P&L</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /* ---------------- render: history ---------------- */
@@ -840,34 +990,41 @@ function populatePairFilter(){
 
 function renderHistory(){
   populatePairFilter();
-  const pairF = $('#hist-filter-pair').value;
+  const accF    = $('#hist-filter-account').value;
+  const pairF   = $('#hist-filter-pair').value;
   const resultF = $('#hist-filter-result').value;
   let list = [...store.trades].reverse();
-  if(pairF) list = list.filter(t => t.pair === pairF);
-  if(resultF === 'win') list = list.filter(t => t.pnl > 0);
+  if(accF)   list = list.filter(t => t.account === accF);
+  if(pairF)  list = list.filter(t => t.pair === pairF);
+  if(resultF === 'win')  list = list.filter(t => t.pnl > 0);
   if(resultF === 'loss') list = list.filter(t => t.pnl < 0);
 
   const tbody = $('#history-tbody');
   if(!list.length){
-    tbody.innerHTML = `<tr><td colspan="9" style="font-family:var(--font-sans);">${emptyState('No trades match this filter.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="font-family:var(--font-sans);">${emptyState('No trades match this filter.')}</td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map(t => `
-    <tr>
+  // FIX: account column now populated correctly
+  tbody.innerHTML = list.map(t => {
+    const acc = store.accounts.find(a => a.id === t.account);
+    return `<tr>
       <td>${t.date}</td>
+      <td class="name-cell">${acc ? escapeHtml(acc.name) : '—'}</td>
       <td class="name-cell">${escapeHtml(t.pair)}</td>
       <td><span class="badge ${t.direction==='Buy'?'badge-buy':'badge-sell'}">${t.direction}</span></td>
       <td class="num">${t.entry ?? '—'}</td>
-      <td class="num">${t.exit ?? '—'}</td>
-      <td class="num">${t.lots ?? '—'}</td>
+      <td class="num">${t.exit  ?? '—'}</td>
+      <td class="num">${t.lots  ?? '—'}</td>
       <td class="num ${t.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(t.pnl)}</td>
       <td class="name-cell">${t.emotion ? escapeHtml(t.emotion) : '—'}</td>
       <td style="white-space:nowrap;">
         <button class="btn-danger-text" style="color:var(--text-secondary);margin-right:10px;" onclick="editTrade('${t.id}')">Edit</button>
         <button class="btn-danger-text" onclick="deleteTrade('${t.id}')">Delete</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
+
 $('#hist-filter-pair').addEventListener('change', renderHistory);
 $('#hist-filter-result').addEventListener('change', renderHistory);
 
@@ -894,8 +1051,8 @@ function renderRowGroup(el, map, mode){
   }).join('');
 }
 function renderAnalytics(){
-  renderRowGroup($('#an-pair'), groupBy(store.trades,'pair'), 'pnl');
-  renderRowGroup($('#an-session'), groupBy(store.trades,'session'), 'pnl');
+  renderRowGroup($('#an-pair'),     groupBy(store.trades,'pair'),     'pnl');
+  renderRowGroup($('#an-session'),  groupBy(store.trades,'session'),  'pnl');
   renderRowGroup($('#an-strategy'), groupBy(store.trades,'strategy'), 'winrate');
 }
 
@@ -908,14 +1065,14 @@ function renderMindset(){
   const entries = Object.entries(em).filter(([k]) => k !== '—');
   if(!entries.length){ list.innerHTML = emptyState('Log emotions with your trades to see patterns.'); return; }
   const byAvg = entries.map(([k,v]) => [k, v.pnl/v.n, v.n]).sort((a,b) => b[1]-a[1]);
-  const best = byAvg[0];
+  const best  = byAvg[0];
   const worst = byAvg[byAvg.length-1];
   const items = [];
   if(best && best[1] > 0){
-    items.push(`<li>${icon()}Best average outcome trading <strong>${escapeHtml(best[0])}</strong> — ${fmtMoney(best[1])} per trade across ${best[2]} trades.</li>`);
+    items.push(`<li>${icon()}Best average: trading <strong>${escapeHtml(best[0])}</strong> — ${fmtMoney(best[1])} per trade across ${best[2]} trades.</li>`);
   }
   if(worst && worst[1] < 0){
-    items.push(`<li>${icon()}Worst average outcome trading <strong>${escapeHtml(worst[0])}</strong> — ${fmtMoney(worst[1])} per trade across ${worst[2]} trades.</li>`);
+    items.push(`<li>${icon()}Worst average: trading <strong>${escapeHtml(worst[0])}</strong> — ${fmtMoney(worst[1])} per trade across ${worst[2]} trades.</li>`);
   }
   const revenge = em['Revenge'];
   if(revenge){
@@ -924,7 +1081,9 @@ function renderMindset(){
   items.push(`<li>${icon()}Tag every trade with an emotion — the pattern gets clearer the more data you log.</li>`);
   list.innerHTML = items.join('');
 }
-function icon(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>`; }
+function icon(){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>`;
+}
 
 /* ---------------- settings ---------------- */
 $('#resync-btn').addEventListener('click', loadFromGitHub);
@@ -936,8 +1095,12 @@ $('#disconnect-btn').addEventListener('click', () => {
 
 /* ---------------- export ---------------- */
 $('#export-csv-btn').addEventListener('click', () => {
-  const headers = ['date','pair','direction','session','entry','exit','sl','tp','rr','lots','pnl','strategy','emotion','notes'];
-  const rows = store.trades.map(t => headers.map(h => csvEscape(t[h] ?? '')).join(','));
+  const headers = ['date','account','pair','direction','session','entry','exit','sl','tp','rr','lots','pnl','strategy','emotion','notes'];
+  const rows = store.trades.map(t => {
+    const acc = store.accounts.find(a => a.id === t.account);
+    const row = {...t, account: acc ? acc.name : ''};
+    return headers.map(h => csvEscape(row[h] ?? '')).join(',');
+  });
   const csv = headers.join(',') + '\n' + rows.join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
@@ -950,18 +1113,11 @@ function csvEscape(v){
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 
-/* ---------------- helpers ---------------- */
-function fmtMoney(n){
-  const sign = n >= 0 ? '+' : '-';
-  return sign + '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits:2});
-}
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-function emptyState(msg){ return `<div class="empty">${msg}</div>`; }
-
+/* ---------------- renderAll ---------------- */
 function renderAll(){
   $('#set-count').textContent = store.trades.length;
+  populateAccountSelects();
+  renderAccountsList();
   renderOverview();
   renderHistory();
   renderAnalytics();
