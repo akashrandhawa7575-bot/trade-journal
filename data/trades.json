@@ -18,5 +18,13 @@
       "notes": "",
       "createdAt": 1788948782247
     }
+  ],
+  "accounts": [
+    {
+      "id": "acc_mtv5wnju",
+      "name": "Funding Pips",
+      "capital": 50000,
+      "createdAt": 1789022670906
+    }
   ]
 }
