@@ -20,6 +20,25 @@
       "createdAt": 1789023011075
     },
     {
+      "id": "mtv67cma3587c",
+      "date": "2026-04-02",
+      "account": "acc_mtv5wnju",
+      "pair": "EURAUD",
+      "direction": "Sell",
+      "session": "London",
+      "entry": 1.67092,
+      "exit": 1.67121,
+      "sl": 1.6792,
+      "tp": 1.65084,
+      "rr": 2.425120772946826,
+      "lots": 3.25,
+      "pnl": -65.1,
+      "strategy": "",
+      "emotion": "Confident",
+      "notes": "",
+      "createdAt": 1789023169954
+    },
+    {
       "id": "mtv60ihce69r7",
       "date": "2026-09-10",
       "account": "acc_mtv5xdem",
