@@ -31,6 +31,12 @@
       "name": "Lux Trading Firm",
       "capital": 100000,
       "createdAt": 1789022686180
+    },
+    {
+      "id": "acc_mtv5xdem",
+      "name": "5ers",
+      "capital": 10000,
+      "createdAt": 1789022704414
     }
   ]
 }
