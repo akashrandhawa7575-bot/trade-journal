@@ -545,6 +545,39 @@ tbody tr:hover td{background:var(--surface-2);}
             <button class="btn btn-ghost" id="disconnect-btn" style="margin-top:8px;color:var(--danger);width:100%;justify-content:center;">Disconnect this device</button>
           </div>
         </div>
+
+        <div class="panel" style="max-width:880px;margin:18px auto 0;">
+          <div class="panel-title">Import trades</div>
+          <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">
+            Import trades from a broker export (e.g. a prop firm account). Choose a .json file or paste
+            a JSON array below. Each trade needs at least pair, direction, entry, exit, lots and pnl —
+            everything else is optional and defaults sensibly.
+          </p>
+          <div class="form-grid" style="margin-bottom:14px;">
+            <div>
+              <label class="field-label">Import into existing account</label>
+              <select id="imp-account"></select>
+            </div>
+            <div>
+              <label class="field-label">...or create new account named</label>
+              <input id="imp-new-account-name" placeholder="e.g. Funding Pips">
+            </div>
+            <div>
+              <label class="field-label">Starting capital for new account ($)</label>
+              <input type="number" step="any" id="imp-new-account-capital" placeholder="50000">
+            </div>
+            <div>
+              <label class="field-label">Choose a .json file</label>
+              <input type="file" id="imp-file" accept=".json,application/json">
+            </div>
+          </div>
+          <label class="field-label">...or paste JSON here</label>
+          <textarea id="imp-json" placeholder='[{"date":"2026-07-04","pair":"XAUUSD","direction":"Buy","entry":4069.82,"exit":4175.13,"lots":0.04,"pnl":421.24}]' style="min-height:120px;font-family:var(--font-mono);font-size:12px;"></textarea>
+          <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-accent" id="imp-run-btn">Import trades</button>
+            <span id="imp-status" style="font-size:12px;color:var(--text-muted);"></span>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -763,6 +796,14 @@ function populateAccountSelects(preferValue){
   const hVal = hAcc.value;
   hAcc.innerHTML = '<option value="">All accounts</option>' + opts;
   hAcc.value = hVal || '';
+
+  // import target select
+  const impAcc = $('#imp-account');
+  if(impAcc){
+    const impVal = impAcc.value;
+    impAcc.innerHTML = opts || '<option value="">— no accounts yet —</option>';
+    if(impVal) impAcc.value = impVal;
+  }
 }
 
 // FIX: render account list in Settings panel
@@ -789,6 +830,13 @@ function renderAccountsList(){
   }).join('');
 }
 
+// FIX: shared account-creation logic (used by "+ Add account" and Import)
+function createAccount(name, capital){
+  const id = 'acc_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  store.accounts.push({ id, name, capital: capital || 0, createdAt: Date.now() });
+  return id;
+}
+
 // FIX: add account handler (was missing entirely)
 $('#acc-add-btn').addEventListener('click', () => {
   const name = $('#acc-new-name').value.trim();
@@ -801,8 +849,7 @@ $('#acc-add-btn').addEventListener('click', () => {
     alert('An account with that name already exists.');
     return;
   }
-  const id = 'acc_' + Date.now().toString(36);
-  store.accounts.push({ id, name, capital, createdAt: Date.now() });
+  createAccount(name, capital);
   $('#acc-new-name').value = '';
   $('#acc-new-capital').value = '';
   saveToGitHub();
@@ -1164,6 +1211,91 @@ function csvEscape(v){
   const s = String(v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
+
+/* ---------------- import ---------------- */
+$('#imp-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $('#imp-json').value = reader.result; };
+  reader.readAsText(file);
+});
+
+function normalizeDir(d){
+  d = String(d || '').trim().toLowerCase();
+  return d.startsWith('s') ? 'Sell' : 'Buy';
+}
+
+$('#imp-run-btn').addEventListener('click', () => {
+  const statusEl = $('#imp-status');
+  statusEl.textContent = '';
+  statusEl.style.color = 'var(--text-muted)';
+
+  // resolve target account: new account (if named) takes priority, else the dropdown
+  const newName = $('#imp-new-account-name').value.trim();
+  const newCapital = parseFloat($('#imp-new-account-capital').value) || 0;
+  let accountId;
+  if(newName){
+    const existing = store.accounts.find(a => a.name.toLowerCase() === newName.toLowerCase());
+    accountId = existing ? existing.id : createAccount(newName, newCapital);
+  } else {
+    accountId = $('#imp-account').value;
+  }
+  if(!accountId){
+    statusEl.textContent = 'Choose an account to import into, or name a new one.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  let records;
+  try{
+    records = JSON.parse($('#imp-json').value);
+    if(!Array.isArray(records)) throw new Error('not an array');
+  } catch(e){
+    statusEl.textContent = 'Could not parse JSON — check it is a valid array of trade objects.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  let added = 0, skipped = 0;
+  records.forEach((r, i) => {
+    const pnl = parseFloat(r.pnl);
+    const pair = (r.pair || r.symbol || '').toString().trim();
+    if(!pair || isNaN(pnl)){ skipped++; return; }
+    const entry = r.entry != null ? parseFloat(r.entry) : null;
+    const exit  = r.exit  != null ? parseFloat(r.exit)  : null;
+    const sl    = r.sl    != null ? parseFloat(r.sl)    : null;
+    const tp    = r.tp    != null ? parseFloat(r.tp)    : null;
+    let rr = null;
+    if(entry !== null && sl !== null && tp !== null && entry !== sl){
+      rr = Math.abs(tp - entry) / Math.abs(entry - sl);
+    }
+    store.trades.push({
+      id: 'imp_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7) + i,
+      date: (r.date || new Date().toISOString().slice(0,10)).toString().slice(0,10),
+      account: accountId,
+      pair, direction: normalizeDir(r.direction || r.side),
+      session: r.session || '',
+      entry, exit, sl, tp, rr,
+      lots: r.lots != null ? parseFloat(r.lots) : (r.volume != null ? parseFloat(r.volume) : null),
+      pnl, strategy: r.strategy || '', emotion: r.emotion || null, notes: r.notes || '',
+      createdAt: Date.now()
+    });
+    added++;
+  });
+
+  if(added){
+    store.trades.sort((a,b) => a.date.localeCompare(b.date));
+    saveToGitHub();
+    renderAll();
+    $('#imp-new-account-name').value = '';
+    $('#imp-new-account-capital').value = '';
+    $('#imp-json').value = '';
+    $('#imp-file').value = '';
+  }
+  statusEl.style.color = skipped && !added ? 'var(--danger)' : 'var(--accent)';
+  statusEl.textContent = `Imported ${added} trade${added===1?'':'s'}` + (skipped ? `, skipped ${skipped} (missing pair/pnl).` : '.');
+});
 
 /* ---------------- renderAll ---------------- */
 function renderAll(){
