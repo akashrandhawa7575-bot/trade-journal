@@ -25,6 +25,12 @@
       "name": "Funding Pips",
       "capital": 50000,
       "createdAt": 1789022670906
+    },
+    {
+      "id": "acc_mtv5wzc4",
+      "name": "Lux Trading Firm",
+      "capital": 100000,
+      "createdAt": 1789022686180
     }
   ]
 }
