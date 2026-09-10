@@ -1,5 +1,25 @@
 {
-  "trades": [],
+  "trades": [
+    {
+      "id": "mtv60ihce69r7",
+      "date": "2026-09-10",
+      "account": "acc_mtv5xdem",
+      "pair": "USDCAD",
+      "direction": "Buy",
+      "session": "London",
+      "entry": 1.39449,
+      "exit": 1.39055,
+      "sl": 1.39055,
+      "tp": 1.40746,
+      "rr": 3.2918781725887682,
+      "lots": 0.17,
+      "pnl": -48.17,
+      "strategy": "",
+      "emotion": "Confident",
+      "notes": "",
+      "createdAt": 1789022850960
+    }
+  ],
   "accounts": [
     {
       "id": "acc_mtv5wnju",
