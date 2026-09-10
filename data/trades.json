@@ -1,6 +1,25 @@
 {
   "trades": [
     {
+      "id": "mtv63y0zspumg",
+      "date": "2026-03-17",
+      "account": "acc_mtv5wnju",
+      "pair": "EURCHF",
+      "direction": "Sell",
+      "session": "New York",
+      "entry": 0.90501,
+      "exit": 0.90735,
+      "sl": 0.90735,
+      "tp": 0.89951,
+      "rr": 2.35042735042732,
+      "lots": 1.6,
+      "pnl": -475.71,
+      "strategy": "",
+      "emotion": "Confident",
+      "notes": "",
+      "createdAt": 1789023011075
+    },
+    {
       "id": "mtv60ihce69r7",
       "date": "2026-09-10",
       "account": "acc_mtv5xdem",
