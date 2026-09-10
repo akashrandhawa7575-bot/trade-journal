@@ -1,24 +1,5 @@
 {
-  "trades": [
-    {
-      "id": "mttxwyp3evz07",
-      "date": "2026-08-12",
-      "pair": "USDCAD",
-      "direction": "Buy",
-      "session": "New York",
-      "entry": 1.39449,
-      "exit": 1.39055,
-      "sl": 1.39055,
-      "tp": 1.40746,
-      "rr": 3.2918781725887682,
-      "lots": 0.17,
-      "pnl": -48.17,
-      "strategy": "",
-      "emotion": "Confident",
-      "notes": "",
-      "createdAt": 1788948782247
-    }
-  ],
+  "trades": [],
   "accounts": [
     {
       "id": "acc_mtv5wnju",
