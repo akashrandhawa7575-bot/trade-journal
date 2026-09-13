@@ -236,6 +236,48 @@ tbody tr:hover td{background:var(--surface-2);}
 .eq-stat b{font-family:var(--font-mono);color:var(--text-primary);display:block;font-size:13.5px;margin-top:3px;font-weight:600;}
 .eq-stat b.pos{color:var(--accent);}
 .eq-stat b.neg{color:var(--danger);}
+
+/* ---------- history: mobile card view ---------- */
+.history-cards{display:none;flex-direction:column;gap:10px;}
+.trade-card{
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--surface);padding:12px 14px;
+}
+.trade-card-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;}
+.trade-card-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);}
+.trade-card-actions{display:flex;gap:14px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px;}
+.trade-card-actions a{color:var(--accent);text-decoration:none;}
+.trade-card-actions button{margin:0;}
+@media(max-width:760px){
+  .history-table-wrap{display:none;}
+  .history-cards{display:flex;}
+}
+
+/* ---------- calendar / heatmap ---------- */
+.calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.calendar-nav{display:flex;align-items:center;gap:10px;}
+.calendar-nav-btn{
+  width:26px;height:26px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-secondary);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:13px;
+}
+.calendar-nav-btn:hover{color:var(--text-primary);border-color:var(--border-strong);}
+.calendar-label{font-size:13px;font-weight:600;min-width:118px;text-align:center;font-family:var(--font-mono);}
+.calendar-summary{font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.calendar-weekday{font-size:10px;color:var(--text-muted);text-align:center;padding-bottom:2px;}
+.calendar-day{
+  aspect-ratio:1;border-radius:6px;padding:5px 6px;font-size:10.5px;
+  border:1px solid var(--border);display:flex;flex-direction:column;justify-content:space-between;
+  font-family:var(--font-mono);color:var(--text-secondary);min-height:44px;
+}
+.calendar-day.empty{border-color:transparent;}
+.calendar-day .cd-num{font-size:10px;color:var(--text-muted);}
+.calendar-day .cd-pnl{font-size:11px;font-weight:600;}
+@media(max-width:520px){
+  .calendar-day{font-size:9px;padding:4px;min-height:34px;}
+  .calendar-day .cd-pnl{font-size:9.5px;}
+}
 .insight-list{list-style:none;display:flex;flex-direction:column;gap:10px;}
 .insight-list li{font-size:13px;color:var(--text-secondary);display:flex;gap:9px;line-height:1.5;}
 .insight-list li svg{flex-shrink:0;margin-top:2px;color:var(--accent);width:15px;height:15px;}
@@ -382,7 +424,7 @@ tbody tr:hover td{background:var(--surface-2);}
       <div class="tab-content active" id="tab-overview">
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-label">Total P&amp;L</div>
+            <div class="stat-label">Net P&amp;L</div>
             <div class="stat-value" id="ov-pnl">$0</div>
             <div class="stat-sub" id="ov-pnl-sub">all time</div>
           </div>
@@ -483,8 +525,24 @@ tbody tr:hover td{background:var(--surface-2);}
               <input type="number" step="any" id="f-lots" placeholder="0.10">
             </div>
             <div>
-              <label class="field-label">P&amp;L ($)</label>
+              <label class="field-label">P&amp;L ($, gross)</label>
               <input type="number" step="any" id="f-pnl" placeholder="120">
+            </div>
+            <div>
+              <label class="field-label">Commission (optional)</label>
+              <input type="number" step="any" id="f-commission" placeholder="0">
+            </div>
+            <div>
+              <label class="field-label">Swap (optional)</label>
+              <input type="number" step="any" id="f-swap" placeholder="0">
+            </div>
+            <div>
+              <label class="field-label">Other fees (optional)</label>
+              <input type="number" step="any" id="f-fees" placeholder="0">
+            </div>
+            <div class="full">
+              <label class="field-label">Chart screenshot URL (optional)</label>
+              <input id="f-screenshot" placeholder="https://www.tradingview.com/x/...">
             </div>
             <div class="full">
               <label class="field-label">Strategy / setup</label>
@@ -534,22 +592,37 @@ tbody tr:hover td{background:var(--surface-2);}
             <option value="asc">Amount: Smallest first</option>
           </select>
         </div>
-        <div class="panel" style="padding:0;overflow-x:auto;">
+        <div class="panel history-table-wrap" style="padding:0;overflow-x:auto;">
           <table id="history-table">
             <thead>
               <tr>
                 <th>Date</th><th class="name-cell">Account</th><th class="name-cell">Pair</th><th>Dir</th>
                 <th class="num">Entry</th><th class="num">Exit</th><th class="num">Lots</th>
-                <th class="num">P&amp;L</th><th class="name-cell">Emotion</th><th></th>
+                <th class="num">Gross</th><th class="num">Fees</th><th class="num">Net</th>
+                <th class="name-cell">Emotion</th><th>Chart</th><th></th>
               </tr>
             </thead>
             <tbody id="history-tbody"></tbody>
           </table>
         </div>
+        <div class="history-cards" id="history-cards"></div>
       </div>
 
       <!-- ANALYTICS -->
       <div class="tab-content" id="tab-analytics">
+        <div class="panel">
+          <div class="calendar-head">
+            <div class="panel-title" style="margin-bottom:0;">Monthly performance</div>
+            <div class="calendar-nav">
+              <button class="calendar-nav-btn" id="cal-prev">‹</button>
+              <span class="calendar-label" id="cal-label">—</span>
+              <button class="calendar-nav-btn" id="cal-next">›</button>
+            </div>
+          </div>
+          <div class="calendar-grid" id="cal-weekdays"></div>
+          <div class="calendar-grid" id="cal-grid" style="margin-top:6px;"></div>
+          <div class="calendar-summary" id="cal-summary" style="margin-top:12px;"></div>
+        </div>
         <div class="two-col">
           <div class="panel">
             <div class="panel-title">P&amp;L by pair</div>
@@ -879,16 +952,16 @@ function renderAccountsList(){
     return;
   }
   list.innerHTML = store.accounts.map(a => {
-    const tradePnl = store.trades
+    const tradeNet = store.trades
       .filter(t => t.account === a.id)
-      .reduce((s, t) => s + t.pnl, 0);
+      .reduce((s, t) => s + netOf(t), 0);
     const tradeCount = store.trades.filter(t => t.account === a.id).length;
-    const net = (a.capital || 0) + tradePnl;
+    const net = (a.capital || 0) + tradeNet;
     return `
       <div class="account-row">
         <div class="account-row-info">
           <span class="account-row-name">${escapeHtml(a.name)}</span>
-          <span class="account-row-meta">Capital: $${fmtNum(a.capital || 0)} &nbsp;|&nbsp; ${tradeCount} trade${tradeCount===1?'':'s'} &nbsp;|&nbsp; Net: <span class="${tradePnl>=0?'pos-txt':'neg-txt'}">$${fmtNum(net)}</span></span>
+          <span class="account-row-meta">Capital: $${fmtNum(a.capital || 0)} &nbsp;|&nbsp; ${tradeCount} trade${tradeCount===1?'':'s'} &nbsp;|&nbsp; Net: <span class="${tradeNet>=0?'pos-txt':'neg-txt'}">$${fmtNum(net)}</span></span>
         </div>
         <button class="btn-danger-text" onclick="deleteAccount('${a.id}')">Remove</button>
       </div>`;
@@ -945,6 +1018,14 @@ function fmtMoney(n){
   const sign = n >= 0 ? '+' : '-';
   return sign + '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits:2});
 }
+// True profit after commissions/swap/fees. Falls back to gross pnl for
+// older trades that don't have cost fields, so nothing old ever changes.
+function netOf(t){
+  return t.pnl - ((t.commission||0) + (t.swap||0) + (t.fees||0));
+}
+function feesOf(t){
+  return (t.commission||0) + (t.swap||0) + (t.fees||0);
+}
 function fmtNum(n){
   return Number(n).toLocaleString(undefined, {maximumFractionDigits:2});
 }
@@ -959,7 +1040,7 @@ function resetForm(){
   selectedEmotion = null;
   $('#log-panel-title').textContent = 'Log a trade';
   $('#cancel-edit-btn').style.display = 'none';
-  ['f-pair','f-entry','f-exit','f-sl','f-tp','f-lots','f-pnl','f-strategy','f-notes'].forEach(id => $('#'+id).value = '');
+  ['f-pair','f-entry','f-exit','f-sl','f-tp','f-lots','f-pnl','f-commission','f-swap','f-fees','f-screenshot','f-strategy','f-notes'].forEach(id => $('#'+id).value = '');
   $('#f-date').value = new Date().toISOString().slice(0,10);
   $('#f-dir').value = 'Buy';
   $('#f-session').value = 'London';
@@ -994,7 +1075,12 @@ $('#save-trade-btn').addEventListener('click', () => {
     pair, direction: $('#f-dir').value, session: $('#f-session').value,
     entry, exit, sl, tp, rr,
     lots: parseFloat($('#f-lots').value) || null,
-    pnl, strategy: $('#f-strategy').value.trim(),
+    pnl,
+    commission: parseFloat($('#f-commission').value) || 0,
+    swap: parseFloat($('#f-swap').value) || 0,
+    fees: parseFloat($('#f-fees').value) || 0,
+    screenshot: $('#f-screenshot').value.trim() || null,
+    strategy: $('#f-strategy').value.trim(),
     emotion: selectedEmotion, notes: $('#f-notes').value.trim(),
     createdAt: editingId ? (store.trades.find(t=>t.id===editingId)||{}).createdAt || Date.now() : Date.now()
   };
@@ -1028,6 +1114,10 @@ function editTrade(id){
   $('#f-tp').value      = t.tp     ?? '';
   $('#f-lots').value    = t.lots   ?? '';
   $('#f-pnl').value     = t.pnl;
+  $('#f-commission').value = t.commission ?? '';
+  $('#f-swap').value       = t.swap ?? '';
+  $('#f-fees').value       = t.fees ?? '';
+  $('#f-screenshot').value = t.screenshot || '';
   $('#f-strategy').value = t.strategy || '';
   $('#f-notes').value   = t.notes || '';
   selectedEmotion = t.emotion;
@@ -1050,22 +1140,29 @@ function renderOverview(){
     ? store.trades.filter(t => t.account === filterAccId)
     : store.trades;
 
-  const totalPnl = trades.reduce((s,t) => s + t.pnl, 0);
-  const wins     = trades.filter(t => t.pnl > 0).length;
+  const totalPnl = trades.reduce((s,t) => s + netOf(t), 0);
+  const totalGross = trades.reduce((s,t) => s + t.pnl, 0);
+  const totalFees = trades.reduce((s,t) => s + feesOf(t), 0);
+  const wins     = trades.filter(t => netOf(t) > 0).length;
   const winRate  = trades.length ? Math.round(wins/trades.length*100) : 0;
 
   $('#ov-pnl').textContent = fmtMoney(totalPnl);
   $('#ov-pnl').className   = 'stat-value ' + (totalPnl >= 0 ? 'pos' : 'neg');
-  $('#ov-pnl-sub').textContent = trades.length + ' trade' + (trades.length===1?'':'s') + ' total';
+  $('#ov-pnl-sub').textContent = totalFees
+    ? `${trades.length} trade${trades.length===1?'':'s'} · gross ${fmtMoney(totalGross)} · fees ${fmtMoney(-totalFees)}`
+    : trades.length + ' trade' + (trades.length===1?'':'s') + ' total';
   $('#ov-winrate').textContent = winRate + '%';
+  $('#ov-winrate').className   = 'stat-value ' + (!trades.length ? '' : (winRate >= 50 ? 'pos' : 'neg'));
   $('#ov-winrate-sub').textContent = wins + ' of ' + trades.length + ' trades';
 
   const withRR = trades.filter(t => t.rr);
-  $('#ov-rr').textContent = withRR.length ? (withRR.reduce((s,t)=>s+t.rr,0)/withRR.length).toFixed(2) : '—';
+  const avgRR = withRR.length ? (withRR.reduce((s,t)=>s+t.rr,0)/withRR.length) : null;
+  $('#ov-rr').textContent = avgRR !== null ? avgRR.toFixed(2) : '—';
+  $('#ov-rr').className   = 'stat-value ' + (avgRR === null ? '' : (avgRR >= 1 ? 'pos' : 'neg'));
 
   let streak = 0, streakType = null;
   for(let i = trades.length - 1; i >= 0; i--){
-    const isWin = trades[i].pnl > 0;
+    const isWin = netOf(trades[i]) > 0;
     if(streakType === null){ streakType = isWin; streak = 1; }
     else if(isWin === streakType){ streak++; }
     else break;
@@ -1084,7 +1181,7 @@ function renderOverview(){
     store.accounts.forEach(a => { byAcc[a.id] = {name: a.name, pnl: 0, n: 0}; });
     store.trades.forEach(t => {
       if(t.account && byAcc[t.account]){
-        byAcc[t.account].pnl += t.pnl;
+        byAcc[t.account].pnl += netOf(t);
         byAcc[t.account].n++;
       }
     });
@@ -1165,9 +1262,9 @@ function drawEquityCurve(){
     return;
   }
 
-  // full cumulative series (running balance always reflects entire history)
+  // full cumulative series (running balance always reflects entire history, net of fees)
   let cum = 0;
-  const fullCum = trades.map(t => (cum += t.pnl));
+  const fullCum = trades.map(t => (cum += netOf(t)));
 
   // slice to the selected range, but keep true running-balance values
   const cutoff = eqRangeCutoff(eqState.range, trades[trades.length-1].date);
@@ -1313,7 +1410,7 @@ function drawEquityCurve(){
     tooltip.innerHTML = `
       <div class="tt-date">${eqFmtDate(viewTrades[idx].date, {weekday:'short', month:'short', day:'numeric'})}</div>
       <div class="tt-pnl ${positive?'pos-txt':'neg-txt'}">${fmtMoney(val)}</div>
-      <div class="tt-trade">${escapeHtml(viewTrades[idx].pair)} · trade ${fmtMoney(viewTrades[idx].pnl)}</div>
+      <div class="tt-trade">${escapeHtml(viewTrades[idx].pair)} · trade ${fmtMoney(netOf(viewTrades[idx]))}</div>
     `;
     tooltip.classList.add('show');
   }
@@ -1340,12 +1437,13 @@ $('#eq-range-selector').addEventListener('click', e => {
 function simpleTable(trades){
   const rows = trades.map(t => {
     const acc = store.accounts.find(a => a.id === t.account);
+    const net = netOf(t);
     return `<tr>
       <td>${t.date}</td>
       <td class="name-cell">${acc ? escapeHtml(acc.name) : '—'}</td>
       <td class="name-cell">${escapeHtml(t.pair)}</td>
       <td><span class="badge ${t.direction==='Buy'?'badge-buy':'badge-sell'}">${t.direction}</span></td>
-      <td class="num ${t.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(t.pnl)}</td>
+      <td class="num ${net>=0?'pos-txt':'neg-txt'}">${fmtMoney(net)}</td>
     </tr>`;
   }).join('');
   return `<table><thead><tr><th>Date</th><th class="name-cell">Account</th><th class="name-cell">Pair</th><th>Dir</th><th class="num">P&L</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -1368,17 +1466,36 @@ function renderHistory(){
   let list = [...store.trades].reverse();
   if(accF)   list = list.filter(t => t.account === accF);
   if(pairF)  list = list.filter(t => t.pair === pairF);
-  if(resultF === 'win')  list = list.filter(t => t.pnl > 0);
-  if(resultF === 'loss') list = list.filter(t => t.pnl < 0);
+  if(resultF === 'win')  list = list.filter(t => netOf(t) > 0);
+  if(resultF === 'loss') list = list.filter(t => netOf(t) < 0);
+
+  // date sort (defaults to latest first if no amount sort is active)
+  const sortDate = $('#hist-sort-date') ? $('#hist-sort-date').value : 'desc';
+  if(sortDate === 'asc') list = [...list].reverse();
+
+  // amount sort operates on the visible net figure and takes priority when set
+  const sortAmt = $('#hist-sort-amount') ? $('#hist-sort-amount').value : '';
+  if(sortAmt === 'desc') list = [...list].sort((a,b) => netOf(b) - netOf(a));
+  if(sortAmt === 'asc')  list = [...list].sort((a,b) => netOf(a) - netOf(b));
 
   const tbody = $('#history-tbody');
+  const cardsWrap = $('#history-cards');
   if(!list.length){
-    tbody.innerHTML = `<tr><td colspan="10" style="font-family:var(--font-sans);">${emptyState('No trades match this filter.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="font-family:var(--font-sans);">${emptyState('No trades match this filter.')}</td></tr>`;
+    cardsWrap.innerHTML = emptyState('No trades match this filter.');
     return;
   }
-  // FIX: account column now populated correctly
+  const chartLink = t => t.screenshot
+    ? `<a href="${escapeHtml(t.screenshot)}" target="_blank" rel="noopener" title="Open chart screenshot">
+         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--accent);vertical-align:middle;">
+           <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 16l-5-4-4 4-3-2-6 4"/>
+         </svg>
+       </a>`
+    : '<span style="color:var(--text-muted);">—</span>';
+
   tbody.innerHTML = list.map(t => {
     const acc = store.accounts.find(a => a.id === t.account);
+    const net = netOf(t), fees = feesOf(t);
     return `<tr>
       <td>${t.date}</td>
       <td class="name-cell">${acc ? escapeHtml(acc.name) : '—'}</td>
@@ -1388,17 +1505,54 @@ function renderHistory(){
       <td class="num">${t.exit  ?? '—'}</td>
       <td class="num">${t.lots  ?? '—'}</td>
       <td class="num ${t.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(t.pnl)}</td>
+      <td class="num">${fees ? fmtMoney(-fees) : '—'}</td>
+      <td class="num ${net>=0?'pos-txt':'neg-txt'}">${fmtMoney(net)}</td>
       <td class="name-cell">${t.emotion ? escapeHtml(t.emotion) : '—'}</td>
+      <td>${chartLink(t)}</td>
       <td style="white-space:nowrap;">
         <button class="btn-danger-text" style="color:var(--text-secondary);margin-right:10px;" onclick="editTrade('${t.id}')">Edit</button>
         <button class="btn-danger-text" onclick="deleteTrade('${t.id}')">Delete</button>
       </td>
     </tr>`;
   }).join('');
+
+  // mobile card view — same data, one card per trade, no horizontal scrolling needed
+  cardsWrap.innerHTML = list.map(t => {
+    const acc = store.accounts.find(a => a.id === t.account);
+    const net = netOf(t), fees = feesOf(t);
+    return `<div class="trade-card">
+      <div class="trade-card-top">
+        <div>
+          <span class="name-cell" style="font-weight:600;">${escapeHtml(t.pair)}</span>
+          <span class="badge ${t.direction==='Buy'?'badge-buy':'badge-sell'}" style="margin-left:6px;">${t.direction}</span>
+        </div>
+        <span class="num ${net>=0?'pos-txt':'neg-txt'}" style="font-size:15px;font-weight:600;">${fmtMoney(net)}</span>
+      </div>
+      <div class="trade-card-meta">
+        <span>${t.date}</span>
+        <span>${acc ? escapeHtml(acc.name) : '—'}</span>
+        ${fees ? `<span>Fees ${fmtMoney(-fees)}</span>` : ''}
+        ${t.emotion ? `<span>${escapeHtml(t.emotion)}</span>` : ''}
+      </div>
+      <div class="trade-card-meta" style="margin-top:4px;">
+        <span>Entry ${t.entry ?? '—'}</span>
+        <span>Exit ${t.exit ?? '—'}</span>
+        <span>Lots ${t.lots ?? '—'}</span>
+        ${fees ? `<span style="color:var(--text-muted);">Gross ${fmtMoney(t.pnl)}</span>` : ''}
+      </div>
+      <div class="trade-card-actions">
+        ${t.screenshot ? `<a href="${escapeHtml(t.screenshot)}" target="_blank" rel="noopener">View chart</a>` : ''}
+        <button class="btn-danger-text" style="color:var(--text-secondary);" onclick="editTrade('${t.id}')">Edit</button>
+        <button class="btn-danger-text" onclick="deleteTrade('${t.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 $('#hist-filter-pair').addEventListener('change', renderHistory);
 $('#hist-filter-result').addEventListener('change', renderHistory);
+$('#hist-sort-date').addEventListener('change', renderHistory);
+$('#hist-sort-amount').addEventListener('change', renderHistory);
 
 /* ---------------- render: analytics ---------------- */
 function groupBy(trades, key){
@@ -1406,8 +1560,9 @@ function groupBy(trades, key){
   trades.forEach(t => {
     const k = t[key] || '—';
     map[k] = map[k] || {pnl:0, n:0, wins:0};
-    map[k].pnl += t.pnl; map[k].n++;
-    if(t.pnl > 0) map[k].wins++;
+    const net = netOf(t);
+    map[k].pnl += net; map[k].n++;
+    if(net > 0) map[k].wins++;
   });
   return map;
 }
@@ -1426,7 +1581,83 @@ function renderAnalytics(){
   renderRowGroup($('#an-pair'),     groupBy(store.trades,'pair'),     'pnl');
   renderRowGroup($('#an-session'),  groupBy(store.trades,'session'),  'pnl');
   renderRowGroup($('#an-strategy'), groupBy(store.trades,'strategy'), 'winrate');
+  renderCalendar();
 }
+
+/* ---------------- render: monthly calendar heatmap ---------------- */
+const calState = { year: null, month: null }; // month is 0-indexed
+const WEEKDAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function calInitDefault(){
+  if(calState.year !== null) return;
+  let ref = new Date();
+  if(store.trades.length){
+    const [y,m] = store.trades[store.trades.length-1].date.split('-').map(Number);
+    ref = new Date(y, m-1, 1);
+  }
+  calState.year = ref.getFullYear();
+  calState.month = ref.getMonth();
+}
+
+function renderCalendar(){
+  calInitDefault();
+  const y = calState.year, m = calState.month;
+  $('#cal-label').textContent = new Date(y, m, 1).toLocaleDateString(undefined, {month:'long', year:'numeric'});
+  $('#cal-weekdays').innerHTML = WEEKDAY_LABELS.map(d => `<div class="calendar-weekday">${d}</div>`).join('');
+
+  // net P&L per day-of-month for the visible month
+  const daily = {};
+  store.trades.forEach(t => {
+    const [ty,tm,td] = t.date.split('-').map(Number);
+    if(ty === y && (tm-1) === m){
+      daily[td] = daily[td] || {pnl:0, n:0};
+      daily[td].pnl += netOf(t);
+      daily[td].n++;
+    }
+  });
+
+  const firstDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const maxAbs = Math.max(1, ...Object.values(daily).map(d => Math.abs(d.pnl)));
+
+  let cells = '';
+  for(let i = 0; i < firstDow; i++) cells += `<div class="calendar-day empty"></div>`;
+  for(let d = 1; d <= daysInMonth; d++){
+    const info = daily[d];
+    if(!info){
+      cells += `<div class="calendar-day"><span class="cd-num">${d}</span></div>`;
+      continue;
+    }
+    const intensity = Math.min(1, Math.abs(info.pnl) / maxAbs);
+    const bg = info.pnl >= 0
+      ? `rgba(62,207,142,${(0.12 + intensity*0.38).toFixed(2)})`
+      : `rgba(229,83,75,${(0.12 + intensity*0.38).toFixed(2)})`;
+    cells += `<div class="calendar-day" style="background:${bg};" title="${info.n} trade${info.n===1?'':'s'} · ${fmtMoney(info.pnl)}">
+      <span class="cd-num">${d}</span>
+      <span class="cd-pnl ${info.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(info.pnl)}</span>
+    </div>`;
+  }
+  $('#cal-grid').innerHTML = cells;
+
+  const monthTotal = Object.values(daily).reduce((s,d) => s + d.pnl, 0);
+  const tradedDays = Object.keys(daily).length;
+  $('#cal-summary').textContent = tradedDays
+    ? `${tradedDays} traded day${tradedDays===1?'':'s'} · net ${fmtMoney(monthTotal)}`
+    : 'No trades logged this month.';
+}
+
+$('#cal-prev').addEventListener('click', () => {
+  calInitDefault();
+  calState.month--;
+  if(calState.month < 0){ calState.month = 11; calState.year--; }
+  renderCalendar();
+});
+$('#cal-next').addEventListener('click', () => {
+  calInitDefault();
+  calState.month++;
+  if(calState.month > 11){ calState.month = 0; calState.year++; }
+  renderCalendar();
+});
 
 /* ---------------- render: mindset ---------------- */
 function renderMindset(){
@@ -1467,10 +1698,10 @@ $('#disconnect-btn').addEventListener('click', () => {
 
 /* ---------------- export ---------------- */
 $('#export-csv-btn').addEventListener('click', () => {
-  const headers = ['date','account','pair','direction','session','entry','exit','sl','tp','rr','lots','pnl','strategy','emotion','notes'];
+  const headers = ['date','account','pair','direction','session','entry','exit','sl','tp','rr','lots','pnl','commission','swap','fees','net','screenshot','strategy','emotion','notes'];
   const rows = store.trades.map(t => {
     const acc = store.accounts.find(a => a.id === t.account);
-    const row = {...t, account: acc ? acc.name : ''};
+    const row = {...t, account: acc ? acc.name : '', net: netOf(t)};
     return headers.map(h => csvEscape(row[h] ?? '')).join(',');
   });
   const csv = headers.join(',') + '\n' + rows.join('\n');
@@ -1551,7 +1782,12 @@ $('#imp-run-btn').addEventListener('click', () => {
       session: r.session || '',
       entry, exit, sl, tp, rr,
       lots: r.lots != null ? parseFloat(r.lots) : (r.volume != null ? parseFloat(r.volume) : null),
-      pnl, strategy: r.strategy || '', emotion: r.emotion || null, notes: r.notes || '',
+      pnl,
+      commission: r.commission != null ? parseFloat(r.commission) || 0 : 0,
+      swap: r.swap != null ? parseFloat(r.swap) || 0 : 0,
+      fees: r.fees != null ? parseFloat(r.fees) || 0 : 0,
+      screenshot: r.screenshot || r.chart || null,
+      strategy: r.strategy || '', emotion: r.emotion || null, notes: r.notes || '',
       createdAt: Date.now()
     });
     added++;
