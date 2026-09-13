@@ -196,18 +196,46 @@ tbody tr:hover td{background:var(--surface-2);}
 .err-msg{background:var(--danger-soft);color:var(--danger);padding:10px 12px;border-radius:var(--radius);font-size:12.5px;margin-top:12px;display:none;}
 .err-msg.show{display:block;}
 
-.equity-svg{width:100%;height:150px;display:block;}
+.panel-title-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+.panel-title-row .panel-title{margin-bottom:0;}
+.range-selector{display:flex;gap:4px;}
+.range-btn{
+  padding:4px 11px;border-radius:20px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-secondary);font-size:11px;
+  cursor:pointer;font-family:var(--font-mono);transition:background .12s,color .12s,border-color .12s;
+}
+.range-btn:hover{color:var(--text-primary);border-color:var(--border-strong);}
+.range-btn.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+
+.equity-svg{width:100%;height:220px;display:block;cursor:crosshair;}
 .equity-wrap{display:flex;gap:10px;align-items:stretch;}
+.equity-chart-area{position:relative;flex:1;min-width:0;}
 .equity-yaxis{
   display:flex;flex-direction:column;justify-content:space-between;
   font-size:11px;font-family:var(--font-mono);color:var(--text-muted);
-  padding:2px 0;min-width:58px;text-align:right;flex-shrink:0;
+  padding:2px 0 2px 0;min-width:64px;text-align:right;flex-shrink:0;
 }
 .equity-xaxis{
   display:flex;justify-content:space-between;
   font-size:11px;font-family:var(--font-mono);color:var(--text-muted);
-  margin-top:8px;padding-left:68px;
+  margin-top:8px;padding-left:74px;
 }
+.equity-tooltip{
+  position:absolute;pointer-events:none;background:var(--surface-2);
+  border:1px solid var(--border-strong);border-radius:var(--radius);
+  padding:7px 11px;font-size:12px;font-family:var(--font-mono);color:var(--text-primary);
+  opacity:0;transition:opacity .1s;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.45);
+  z-index:10;transform:translate(-50%,-100%);top:0;left:0;
+}
+.equity-tooltip.show{opacity:1;}
+.equity-tooltip .tt-date{color:var(--text-muted);font-size:10.5px;margin-bottom:3px;}
+.equity-tooltip .tt-pnl{font-size:13.5px;font-weight:600;}
+.equity-tooltip .tt-trade{color:var(--text-secondary);font-size:10.5px;margin-top:3px;}
+.equity-stats-row{display:flex;gap:24px;margin-top:14px;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--border);}
+.eq-stat{font-size:11px;color:var(--text-muted);}
+.eq-stat b{font-family:var(--font-mono);color:var(--text-primary);display:block;font-size:13.5px;margin-top:3px;font-weight:600;}
+.eq-stat b.pos{color:var(--accent);}
+.eq-stat b.neg{color:var(--danger);}
 .insight-list{list-style:none;display:flex;flex-direction:column;gap:10px;}
 .insight-list li{font-size:13px;color:var(--text-secondary);display:flex;gap:9px;line-height:1.5;}
 .insight-list li svg{flex-shrink:0;margin-top:2px;color:var(--accent);width:15px;height:15px;}
@@ -376,19 +404,25 @@ tbody tr:hover td{background:var(--surface-2);}
         </div>
 
         <div class="panel">
-          <div class="panel-title">Equity curve</div>
-          <div class="equity-wrap">
-            <div class="equity-yaxis">
-              <span id="eq-y-max">—</span>
-              <span id="eq-y-zero">$0</span>
-              <span id="eq-y-min">—</span>
+          <div class="panel-title-row">
+            <div class="panel-title">Equity curve</div>
+            <div class="range-selector" id="eq-range-selector">
+              <button class="range-btn" data-range="1M">1M</button>
+              <button class="range-btn" data-range="3M">3M</button>
+              <button class="range-btn" data-range="6M">6M</button>
+              <button class="range-btn" data-range="1Y">1Y</button>
+              <button class="range-btn active" data-range="ALL">All</button>
             </div>
-            <svg class="equity-svg" id="equity-svg" viewBox="0 0 700 150" preserveAspectRatio="none"></svg>
           </div>
-          <div class="equity-xaxis">
-            <span id="eq-x-start">—</span>
-            <span id="eq-x-end">—</span>
+          <div class="equity-wrap">
+            <div class="equity-yaxis" id="eq-yaxis"></div>
+            <div class="equity-chart-area">
+              <svg class="equity-svg" id="equity-svg" viewBox="0 0 700 220" preserveAspectRatio="none"></svg>
+              <div class="equity-tooltip" id="eq-tooltip"></div>
+            </div>
           </div>
+          <div class="equity-xaxis" id="eq-xaxis"></div>
+          <div class="equity-stats-row" id="eq-stats-row"></div>
         </div>
 
         <div class="two-col" id="ov-secondary">
@@ -1069,42 +1103,238 @@ function renderOverview(){
   wrap.innerHTML = simpleTable(recent);
 }
 
+/* ---------------- equity curve (detailed) ---------------- */
+const eqState = { trades: [], range: 'ALL' };
+
+function eqFmtDate(dateStr, opts){
+  const [y,m,d] = String(dateStr).split('-').map(Number);
+  if(!y || !m || !d) return dateStr;
+  const dt = new Date(y, m-1, d);
+  return dt.toLocaleDateString(undefined, opts || {month:'short', day:'numeric'});
+}
+
+// Catmull-Rom -> cubic bezier smoothing, so the curve reads as a smooth trend line
+function smoothPath(coords){
+  if(coords.length < 3){
+    return coords.map((p,i) => (i===0?'M':'L') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
+  }
+  let d = `M${coords[0][0].toFixed(2)},${coords[0][1].toFixed(2)}`;
+  for(let i = 0; i < coords.length - 1; i++){
+    const p0 = coords[i === 0 ? 0 : i-1];
+    const p1 = coords[i];
+    const p2 = coords[i+1];
+    const p3 = coords[i+2 < coords.length ? i+2 : i+1];
+    const c1x = p1[0] + (p2[0]-p0[0])/6;
+    const c1y = p1[1] + (p2[1]-p0[1])/6;
+    const c2x = p2[0] - (p3[0]-p1[0])/6;
+    const c2y = p2[1] - (p3[1]-p1[1])/6;
+    d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
+  }
+  return d;
+}
+
+function eqRangeCutoff(range, lastDateStr){
+  if(range === 'ALL') return null;
+  const [y,m,d] = lastDateStr.split('-').map(Number);
+  const end = new Date(y, m-1, d);
+  const months = {'1M':1, '3M':3, '6M':6, '1Y':12}[range] || 0;
+  const cutoff = new Date(end);
+  cutoff.setMonth(cutoff.getMonth() - months);
+  return cutoff;
+}
+
 function renderEquityCurve(trades){
+  eqState.trades = trades;
+  drawEquityCurve();
+}
+
+function drawEquityCurve(){
+  const trades = eqState.trades;
   const svg = $('#equity-svg');
+  const yAxis = $('#eq-yaxis');
+  const xAxis = $('#eq-xaxis');
+  const statsRow = $('#eq-stats-row');
+  const tooltip = $('#eq-tooltip');
+
   if(!trades.length){
     svg.innerHTML = '';
-    $('#eq-y-max').textContent = '—';
-    $('#eq-y-min').textContent = '—';
-    $('#eq-x-start').textContent = '—';
-    $('#eq-x-end').textContent = '—';
+    yAxis.innerHTML = '';
+    xAxis.innerHTML = '';
+    statsRow.innerHTML = '';
+    tooltip.classList.remove('show');
     return;
   }
-  const w = 700, h = 150, pad = 8;
+
+  // full cumulative series (running balance always reflects entire history)
   let cum = 0;
-  const pts = trades.map(t => (cum += t.pnl));
-  const min = Math.min(0, ...pts), max = Math.max(0, ...pts);
+  const fullCum = trades.map(t => (cum += t.pnl));
+
+  // slice to the selected range, but keep true running-balance values
+  const cutoff = eqRangeCutoff(eqState.range, trades[trades.length-1].date);
+  let startIdx = 0;
+  if(cutoff){
+    startIdx = trades.findIndex(t => {
+      const [y,m,d] = t.date.split('-').map(Number);
+      return new Date(y, m-1, d) >= cutoff;
+    });
+    if(startIdx === -1) startIdx = trades.length - 1;
+  }
+  const viewTrades = trades.slice(startIdx);
+  const viewPts = fullCum.slice(startIdx);
+
+  if(viewPts.length < 2){
+    svg.innerHTML = '';
+    yAxis.innerHTML = '';
+    xAxis.innerHTML = '';
+    statsRow.innerHTML = emptyState('Not enough trades in this range.');
+    tooltip.classList.remove('show');
+    return;
+  }
+
+  const w = 700, h = 220, padX = 10, padY = 16;
+  const min = Math.min(0, ...viewPts), max = Math.max(0, ...viewPts);
   const range = (max - min) || 1;
-  const stepX = pts.length > 1 ? (w - pad*2) / (pts.length - 1) : 0;
-  const coords = pts.map((v,i) => {
-    const x = pad + i * stepX;
-    const y = h - pad - ((v - min) / range) * (h - pad*2);
-    return [x,y];
+  const stepX = (w - padX*2) / (viewPts.length - 1);
+  const yOf = v => h - padY - ((v - min) / range) * (h - padY*2);
+  const coords = viewPts.map((v,i) => [padX + i*stepX, yOf(v)]);
+  const zeroY = yOf(0);
+
+  const linePath = smoothPath(coords);
+  const lastX = coords[coords.length-1][0], firstX = coords[0][0];
+  const areaPath = `${linePath} L${lastX.toFixed(2)},${zeroY.toFixed(2)} L${firstX.toFixed(2)},${zeroY.toFixed(2)} Z`;
+
+  // -------- max drawdown (largest peak-to-trough decline in view) --------
+  let peak = viewPts[0], peakIdx = 0, ddPeakIdx = 0, ddTroughIdx = 0, maxDD = 0;
+  viewPts.forEach((v,i) => {
+    if(v > peak){ peak = v; peakIdx = i; }
+    const dd = peak - v;
+    if(dd > maxDD){ maxDD = dd; ddPeakIdx = peakIdx; ddTroughIdx = i; }
   });
-  const line = coords.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-  const zeroY = h - pad - ((0 - min) / range) * (h - pad*2);
-  const areaPath = line + ` L${coords[coords.length-1][0].toFixed(1)},${zeroY} L${coords[0][0].toFixed(1)},${zeroY} Z`;
-  const positive = pts[pts.length-1] >= 0;
+  const hasDD = maxDD > 0;
+
+  // -------- horizontal grid lines / y-axis ticks (5 evenly spaced values) --------
+  const tickCount = 4;
+  const ticks = [];
+  for(let i = 0; i <= tickCount; i++) ticks.push(max - (range * i / tickCount));
+  const gridLines = ticks.map(v => {
+    const y = yOf(v).toFixed(2);
+    const isZero = Math.abs(v) < range*0.001;
+    return `<line x1="${padX}" y1="${y}" x2="${w-padX}" y2="${y}" class="eq-grid-line" stroke-dasharray="${isZero?'3,3':'0'}" stroke="${isZero?'var(--border-strong)':'var(--border)'}"/>`;
+  }).join('');
+  yAxis.innerHTML = ticks.map(v => `<span>${fmtMoney(v)}</span>`).join('');
+
+  // -------- vertical grid lines / x-axis date labels --------
+  const xTickCount = Math.min(5, viewPts.length - 1);
+  const xLabels = [];
+  const vGridLines = [];
+  for(let i = 0; i <= xTickCount; i++){
+    const idx = Math.round(i * (viewPts.length - 1) / xTickCount);
+    const x = coords[idx][0];
+    xLabels.push(`<span style="${i===0?'text-align:left;':i===xTickCount?'text-align:right;':'text-align:center;'}flex:1;">${eqFmtDate(viewTrades[idx].date)}</span>`);
+    if(i > 0 && i < xTickCount){
+      vGridLines.push(`<line x1="${x.toFixed(2)}" y1="${padY}" x2="${x.toFixed(2)}" y2="${h-padY}" class="eq-grid-line" stroke="var(--border)"/>`);
+    }
+  }
+  xAxis.innerHTML = xLabels.join('');
+
+  // -------- drawdown shading + peak/trough markers --------
+  let ddShade = '', ddMarkers = '';
+  if(hasDD){
+    const x1 = coords[ddPeakIdx][0], x2 = coords[ddTroughIdx][0];
+    ddShade = `<rect x="${x1.toFixed(2)}" y="${padY}" width="${(x2-x1).toFixed(2)}" height="${h-padY*2}" fill="var(--danger-soft)" opacity="0.5"/>`;
+    ddMarkers = `
+      <circle cx="${coords[ddPeakIdx][0].toFixed(2)}" cy="${coords[ddPeakIdx][1].toFixed(2)}" r="3.5" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx="${coords[ddTroughIdx][0].toFixed(2)}" cy="${coords[ddTroughIdx][1].toFixed(2)}" r="3.5" fill="var(--bg)" stroke="var(--danger)" stroke-width="2"/>
+    `;
+  }
+
+  // -------- gradient fill + two-tone line, split precisely at the zero line --------
   svg.innerHTML = `
-    <line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${w-pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3,3"/>
-    <path d="${areaPath}" fill="${positive ? 'rgba(62,207,142,0.10)' : 'rgba(229,83,75,0.10)'}" stroke="none"/>
-    <path d="${line}" fill="none" stroke="${positive ? 'var(--accent)' : 'var(--danger)'}" stroke-width="2"/>
+    <defs>
+      <linearGradient id="eqGradPos" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+      </linearGradient>
+      <linearGradient id="eqGradNeg" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stop-color="var(--danger)" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="var(--danger)" stop-opacity="0.02"/>
+      </linearGradient>
+      <clipPath id="eqClipTop"><rect x="0" y="0" width="${w}" height="${zeroY.toFixed(2)}"/></clipPath>
+      <clipPath id="eqClipBottom"><rect x="0" y="${zeroY.toFixed(2)}" width="${w}" height="${(h-zeroY).toFixed(2)}"/></clipPath>
+    </defs>
+    ${gridLines}
+    ${vGridLines.join('')}
+    ${ddShade}
+    <path d="${areaPath}" fill="url(#eqGradPos)" stroke="none" clip-path="url(#eqClipTop)"/>
+    <path d="${areaPath}" fill="url(#eqGradNeg)" stroke="none" clip-path="url(#eqClipBottom)"/>
+    <path d="${linePath}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" clip-path="url(#eqClipTop)"/>
+    <path d="${linePath}" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" clip-path="url(#eqClipBottom)"/>
+    ${ddMarkers}
+    <g id="eq-hover-layer" style="opacity:0;">
+      <line id="eq-crosshair" x1="0" y1="${padY}" x2="0" y2="${h-padY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="2,2"/>
+      <circle id="eq-hover-dot" r="4.5" stroke-width="2" fill="var(--bg)"/>
+    </g>
   `;
-  // FIX: date (x-axis) and running-balance (y-axis) labels around the chart
-  $('#eq-y-max').textContent  = fmtMoney(max);
-  $('#eq-y-min').textContent  = fmtMoney(min);
-  $('#eq-x-start').textContent = trades[0].date;
-  $('#eq-x-end').textContent   = trades[trades.length-1].date;
+
+  // -------- stats row --------
+  const periodPnl = viewPts[viewPts.length-1] - (startIdx > 0 ? fullCum[startIdx-1] : 0);
+  statsRow.innerHTML = `
+    <div class="eq-stat">Period P&amp;L<b class="${periodPnl>=0?'pos':'neg'}">${fmtMoney(periodPnl)}</b></div>
+    <div class="eq-stat">Peak equity<b class="pos">${fmtMoney(max)}</b></div>
+    <div class="eq-stat">Max drawdown<b class="${hasDD?'neg':''}">${hasDD ? fmtMoney(-maxDD) : '—'}</b></div>
+    <div class="eq-stat">Trades in view<b>${viewPts.length}</b></div>
+  `;
+
+  // -------- hover interaction: tooltip + crosshair + dot --------
+  const hoverLayer = $('#eq-hover-layer');
+  const crosshair = $('#eq-crosshair');
+  const hoverDot = $('#eq-hover-dot');
+
+  function showHover(clientX){
+    const rect = svg.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * w;
+    let idx = Math.round((relX - padX) / stepX);
+    idx = Math.max(0, Math.min(coords.length - 1, idx));
+    const [cx, cy] = coords[idx];
+    const val = viewPts[idx];
+    const positive = val >= 0;
+
+    hoverLayer.style.opacity = '1';
+    crosshair.setAttribute('x1', cx.toFixed(2));
+    crosshair.setAttribute('x2', cx.toFixed(2));
+    hoverDot.setAttribute('cx', cx.toFixed(2));
+    hoverDot.setAttribute('cy', cy.toFixed(2));
+    hoverDot.setAttribute('stroke', positive ? 'var(--accent)' : 'var(--danger)');
+
+    const pxX = (cx / w) * rect.width;
+    const pxY = (cy / h) * rect.height;
+    tooltip.style.left = pxX + 'px';
+    tooltip.style.top = Math.max(28, pxY) + 'px';
+    tooltip.innerHTML = `
+      <div class="tt-date">${eqFmtDate(viewTrades[idx].date, {weekday:'short', month:'short', day:'numeric'})}</div>
+      <div class="tt-pnl ${positive?'pos-txt':'neg-txt'}">${fmtMoney(val)}</div>
+      <div class="tt-trade">${escapeHtml(viewTrades[idx].pair)} · trade ${fmtMoney(viewTrades[idx].pnl)}</div>
+    `;
+    tooltip.classList.add('show');
+  }
+  function hideHover(){
+    hoverLayer.style.opacity = '0';
+    tooltip.classList.remove('show');
+  }
+  svg.onmousemove = e => showHover(e.clientX);
+  svg.onmouseleave = hideHover;
+  svg.ontouchmove = e => { showHover(e.touches[0].clientX); e.preventDefault(); };
+  svg.ontouchend = hideHover;
 }
+
+// range selector — wired once, re-renders the already-computed trade list
+$('#eq-range-selector').addEventListener('click', e => {
+  const btn = e.target.closest('.range-btn');
+  if(!btn) return;
+  eqState.range = btn.dataset.range;
+  $$('#eq-range-selector .range-btn').forEach(b => b.classList.toggle('active', b === btn));
+  drawEquityCurve();
+});
 
 // FIX: simpleTable now shows Account column
 function simpleTable(trades){
