@@ -77,6 +77,41 @@ button,input,select,textarea{font-family:inherit;}
 .sync-pill.busy .sync-dot{background:var(--warn);animation:pulse 1s infinite;}
 .sync-pill.err .sync-dot{background:var(--danger);}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+/* dynamic sync affordances: spinner while busy, persistent warning look on error */
+.sync-spin{width:11px;height:11px;flex-shrink:0;display:none;animation:spin .7s linear infinite;}
+.sync-pill.busy .sync-spin{display:block;}
+.sync-pill.busy .sync-dot{display:none;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.sync-pill.err{border-color:var(--danger);color:var(--danger);font-weight:500;background:var(--danger-soft);}
+.sync-pill.err .sync-warn{display:flex;}
+.sync-warn{display:none;flex-shrink:0;}
+
+/* ---------- collapsible sidebar ---------- */
+.sidebar{transition:width .16s ease;}
+.collapse-btn{
+  margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;
+  padding:4px;display:flex;align-items:center;border-radius:4px;flex-shrink:0;
+}
+.collapse-btn:hover{color:var(--text-primary);background:var(--surface-2);}
+.collapse-btn svg{transition:transform .16s ease;}
+.sidebar.collapsed{width:60px;}
+.sidebar.collapsed .brand{justify-content:center;padding:0 0 22px;}
+.sidebar.collapsed .brand-name,
+.sidebar.collapsed .brand-sub,
+.sidebar.collapsed .collapse-btn,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .account-wrap,
+.sidebar.collapsed #sync-label{display:none;}
+.sidebar.collapsed .nav-item{justify-content:center;padding:11px;}
+.sidebar.collapsed .sync-pill{justify-content:center;padding:8px;}
+.sidebar.collapsed .brand-mark{transform:none;}
+.sidebar-expand-btn{display:none;}
+.sidebar.collapsed .sidebar-expand-btn{
+  display:flex;justify-content:center;padding:8px 0 4px;background:none;border:none;
+  color:var(--text-muted);cursor:pointer;
+}
+.sidebar.collapsed .sidebar-expand-btn:hover{color:var(--text-primary);}
+@media(max-width:700px){ .collapse-btn,.sidebar-expand-btn{display:none !important;} }
 
 /* overlay behind the mobile drawer */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(5,6,8,.6);z-index:15;}
@@ -166,6 +201,10 @@ tbody tr:hover td{background:var(--surface-2);}
 .badge{display:inline-flex;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;font-family:var(--font-sans);}
 .badge-buy{background:var(--accent-soft);color:var(--accent);}
 .badge-sell{background:var(--danger-soft);color:var(--danger);}
+.badge-neutral{background:var(--warn-soft);color:var(--warn);}
+
+/* secondary data in the history table is visually quieter than Date/Pair/Net */
+.cell-muted{color:var(--text-muted) !important;font-size:11.5px !important;}
 
 .row-flex{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap;}
 .row-flex:last-child{border-bottom:none;}
@@ -174,12 +213,23 @@ tbody tr:hover td{background:var(--surface-2);}
 .form-grid .full{grid-column:1/-1;}
 @media(max-width:640px){.form-grid{grid-template-columns:1fr;}}
 
+/* group related fields in the trade form so it doesn't read as one long list */
+.form-section{margin-bottom:24px;}
+.form-section:last-child{margin-bottom:0;}
+.form-section-title{
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);
+}
+.field-hint{font-size:11px;color:var(--text-muted);margin-top:6px;font-family:var(--font-mono);}
+
 .chip-group{display:flex;gap:7px;flex-wrap:wrap;}
 .chip{
   padding:6px 13px;border-radius:20px;border:1px solid var(--border);
   background:var(--surface-2);font-size:12px;cursor:pointer;color:var(--text-secondary);
 }
 .chip.selected{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+/* direction pills read as buy(green)/sell(red) once selected, same as history badges */
+.chip[data-dir="Sell"].selected{background:var(--danger-soft);color:var(--danger);border-color:var(--danger);}
 
 .empty{
   text-align:center;padding:50px 20px;color:var(--text-muted);
@@ -236,6 +286,13 @@ tbody tr:hover td{background:var(--surface-2);}
 .eq-stat b{font-family:var(--font-mono);color:var(--text-primary);display:block;font-size:13.5px;margin-top:3px;font-weight:600;}
 .eq-stat b.pos{color:var(--accent);}
 .eq-stat b.neg{color:var(--danger);}
+
+/* history table header stays visible while scrolling a long trade list */
+.history-table-wrap{max-height:68vh;overflow-y:auto;}
+#history-table thead th{
+  position:sticky;top:0;background:var(--surface);z-index:2;
+  box-shadow:0 1px 0 var(--border);
+}
 
 /* ---------- history: mobile card view ---------- */
 .history-cards{display:none;flex-direction:column;gap:10px;}
@@ -368,39 +425,50 @@ tbody tr:hover td{background:var(--surface-2);}
         <span class="brand-name">Ledger</span>
         <span class="brand-sub" id="repo-label"></span>
       </div>
+      <button class="collapse-btn" id="sidebar-collapse-btn" title="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
     </div>
-    <div style="padding:0 10px 14px;">
+    <button class="sidebar-expand-btn" id="sidebar-expand-btn" title="Expand sidebar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div class="account-wrap" style="padding:0 10px 14px;">
       <label class="field-label" style="margin-bottom:5px;">Account</label>
       <select id="account-switcher"></select>
     </div>
     <nav class="nav">
-      <button class="nav-item active" data-tab="overview">
+      <button class="nav-item active" data-tab="overview" title="Overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/></svg>
-        Overview
+        <span class="nav-label">Overview</span>
       </button>
-      <button class="nav-item" data-tab="log">
+      <button class="nav-item" data-tab="log" title="New trade">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
-        New trade
+        <span class="nav-label">New trade</span>
       </button>
-      <button class="nav-item" data-tab="history">
+      <button class="nav-item" data-tab="history" title="History">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-        History
+        <span class="nav-label">History</span>
       </button>
-      <button class="nav-item" data-tab="analytics">
+      <button class="nav-item" data-tab="analytics" title="Analytics">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V9M11 19V4M18 19v-6"/></svg>
-        Analytics
+        <span class="nav-label">Analytics</span>
       </button>
-      <button class="nav-item" data-tab="mindset">
+      <button class="nav-item" data-tab="mindset" title="Mindset">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
-        Mindset
+        <span class="nav-label">Mindset</span>
       </button>
-      <button class="nav-item" data-tab="settings">
+      <button class="nav-item" data-tab="settings" title="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        Settings
+        <span class="nav-label">Settings</span>
       </button>
     </nav>
     <div class="sidebar-foot">
-      <div class="sync-pill" id="sync-pill"><span class="sync-dot"></span><span id="sync-label">idle</span></div>
+      <div class="sync-pill" id="sync-pill">
+        <span class="sync-dot"></span>
+        <svg class="sync-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="9" opacity=".25"/><path d="M21 12a9 9 0 0 0-9-9"/></svg>
+        <svg class="sync-warn" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <span id="sync-label">idle</span>
+      </div>
     </div>
   </div>
 
@@ -483,89 +551,120 @@ tbody tr:hover td{background:var(--surface-2);}
       <div class="tab-content" id="tab-log">
         <div class="panel" style="max-width:640px;margin:0 auto;">
           <div class="panel-title" id="log-panel-title">Log a trade</div>
-          <div class="form-grid">
-            <div>
-              <label class="field-label">Account</label>
-              <select id="f-account"></select>
-            </div>
-            <div>
-              <label class="field-label">Date</label>
-              <input type="date" id="f-date">
-            </div>
-            <div>
-              <label class="field-label">Pair / instrument</label>
-              <input id="f-pair" placeholder="EURUSD">
-            </div>
-            <div>
-              <label class="field-label">Direction</label>
-              <select id="f-dir"><option>Buy</option><option>Sell</option></select>
-            </div>
-            <div>
-              <label class="field-label">Session</label>
-              <select id="f-session"><option>Asian</option><option>London</option><option>New York</option><option>Overlap</option></select>
-            </div>
-            <div>
-              <label class="field-label">Entry price</label>
-              <input type="number" step="any" id="f-entry">
-            </div>
-            <div>
-              <label class="field-label">Exit price</label>
-              <input type="number" step="any" id="f-exit">
-            </div>
-            <div>
-              <label class="field-label">Stop loss (optional)</label>
-              <input type="number" step="any" id="f-sl">
-            </div>
-            <div>
-              <label class="field-label">Take profit (optional)</label>
-              <input type="number" step="any" id="f-tp">
-            </div>
-            <div>
-              <label class="field-label">Lot size</label>
-              <input type="number" step="any" id="f-lots" placeholder="0.10">
-            </div>
-            <div>
-              <label class="field-label">P&amp;L ($, gross)</label>
-              <input type="number" step="any" id="f-pnl" placeholder="120">
-            </div>
-            <div>
-              <label class="field-label">Commission (optional)</label>
-              <input type="number" step="any" id="f-commission" placeholder="0">
-            </div>
-            <div>
-              <label class="field-label">Swap (optional)</label>
-              <input type="number" step="any" id="f-swap" placeholder="0">
-            </div>
-            <div>
-              <label class="field-label">Other fees (optional)</label>
-              <input type="number" step="any" id="f-fees" placeholder="0">
-            </div>
-            <div class="full">
-              <label class="field-label">Chart screenshot URL (optional)</label>
-              <input id="f-screenshot" placeholder="https://www.tradingview.com/x/...">
-            </div>
-            <div class="full">
-              <label class="field-label">Strategy / setup</label>
-              <input id="f-strategy" placeholder="e.g. COT extreme reversal, breakout retest">
-            </div>
-            <div class="full">
-              <label class="field-label">Emotion during trade</label>
-              <div class="chip-group" id="f-emotion-group">
-                <button type="button" class="chip" data-emotion="Confident">Confident</button>
-                <button type="button" class="chip" data-emotion="Calm">Calm</button>
-                <button type="button" class="chip" data-emotion="Anxious">Anxious</button>
-                <button type="button" class="chip" data-emotion="FOMO">FOMO</button>
-                <button type="button" class="chip" data-emotion="Revenge">Revenge</button>
-                <button type="button" class="chip" data-emotion="Bored">Bored</button>
-                <button type="button" class="chip" data-emotion="Impatient">Impatient</button>
+
+          <!-- EXECUTION -->
+          <div class="form-section">
+            <div class="form-section-title">Execution</div>
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Account</label>
+                <select id="f-account"></select>
+              </div>
+              <div>
+                <label class="field-label">Date</label>
+                <input type="date" id="f-date">
+              </div>
+              <div>
+                <label class="field-label">Pair / instrument</label>
+                <input id="f-pair" placeholder="EURUSD">
+              </div>
+              <div>
+                <label class="field-label">Lot size</label>
+                <input type="number" step="any" id="f-lots" placeholder="0.10">
+              </div>
+              <div class="full">
+                <label class="field-label">Direction</label>
+                <div class="chip-group" id="f-dir-group">
+                  <button type="button" class="chip selected" data-dir="Buy">Buy</button>
+                  <button type="button" class="chip" data-dir="Sell">Sell</button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Entry price</label>
+                <input type="number" step="any" id="f-entry">
+              </div>
+              <div>
+                <label class="field-label">Exit price</label>
+                <input type="number" step="any" id="f-exit">
+              </div>
+              <div>
+                <label class="field-label">Stop loss (optional)</label>
+                <input type="number" step="any" id="f-sl">
+              </div>
+              <div>
+                <label class="field-label">Take profit (optional)</label>
+                <input type="number" step="any" id="f-tp">
+              </div>
+              <div class="full">
+                <div class="field-hint" id="f-rr-hint">R:R —</div>
+              </div>
+              <div>
+                <label class="field-label">P&amp;L ($, gross)</label>
+                <input type="number" step="any" id="f-pnl" placeholder="120">
+              </div>
+              <div>
+                <label class="field-label">Commission (optional)</label>
+                <input type="number" step="any" id="f-commission" placeholder="0">
+              </div>
+              <div>
+                <label class="field-label">Swap (optional)</label>
+                <input type="number" step="any" id="f-swap" placeholder="0">
+              </div>
+              <div>
+                <label class="field-label">Other fees (optional)</label>
+                <input type="number" step="any" id="f-fees" placeholder="0">
               </div>
             </div>
-            <div class="full">
-              <label class="field-label">Notes</label>
-              <textarea id="f-notes" placeholder="What was the setup, what went right or wrong..."></textarea>
+          </div>
+
+          <!-- CONTEXT -->
+          <div class="form-section">
+            <div class="form-section-title">Context</div>
+            <div class="form-grid">
+              <div class="full">
+                <label class="field-label">Session</label>
+                <div class="chip-group" id="f-session-group">
+                  <button type="button" class="chip" data-session="Asian">Asian</button>
+                  <button type="button" class="chip selected" data-session="London">London</button>
+                  <button type="button" class="chip" data-session="New York">New York</button>
+                  <button type="button" class="chip" data-session="Overlap">Overlap</button>
+                </div>
+              </div>
+              <div class="full">
+                <label class="field-label">Strategy / setup</label>
+                <input id="f-strategy" placeholder="e.g. COT extreme reversal, breakout retest">
+              </div>
+              <div class="full">
+                <label class="field-label">Emotion during trade</label>
+                <div class="chip-group" id="f-emotion-group">
+                  <button type="button" class="chip" data-emotion="Confident">Confident</button>
+                  <button type="button" class="chip" data-emotion="Calm">Calm</button>
+                  <button type="button" class="chip" data-emotion="Anxious">Anxious</button>
+                  <button type="button" class="chip" data-emotion="FOMO">FOMO</button>
+                  <button type="button" class="chip" data-emotion="Revenge">Revenge</button>
+                  <button type="button" class="chip" data-emotion="Bored">Bored</button>
+                  <button type="button" class="chip" data-emotion="Impatient">Impatient</button>
+                </div>
+              </div>
             </div>
           </div>
-          <div style="display:flex;gap:10px;margin-top:18px;">
+
+          <!-- MEDIA & NOTES -->
+          <div class="form-section">
+            <div class="form-section-title">Media &amp; notes</div>
+            <div class="form-grid">
+              <div class="full">
+                <label class="field-label">Chart screenshot URL (optional)</label>
+                <input id="f-screenshot" placeholder="https://www.tradingview.com/x/...">
+              </div>
+              <div class="full">
+                <label class="field-label">Notes</label>
+                <textarea id="f-notes" placeholder="What was the setup, what went right or wrong..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:4px;">
             <button class="btn btn-accent" id="save-trade-btn">Save trade</button>
             <button class="btn btn-ghost" id="cancel-edit-btn" style="display:none;">Cancel edit</button>
           </div>
@@ -596,9 +695,9 @@ tbody tr:hover td{background:var(--surface-2);}
           <table id="history-table">
             <thead>
               <tr>
-                <th>Date</th><th class="name-cell">Account</th><th class="name-cell">Pair</th><th>Dir</th>
+                <th>Date</th><th class="name-cell cell-muted">Account</th><th class="name-cell">Pair</th><th>Dir</th>
                 <th class="num">Entry</th><th class="num">Exit</th><th class="num">Lots</th>
-                <th class="num">Gross</th><th class="num">Fees</th><th class="num">Net</th>
+                <th class="num">Gross</th><th class="num cell-muted">Fees</th><th class="num">Net</th>
                 <th class="name-cell">Emotion</th><th>Chart</th><th></th>
               </tr>
             </thead>
@@ -734,6 +833,8 @@ let store = { trades: [], accounts: [] };
 let fileSha = null;
 let editingId = null;
 let selectedEmotion = null;
+let selectedDirection = 'Buy';
+let selectedSession = 'London';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -877,7 +978,11 @@ $('#cfg-connect').addEventListener('click', async () => {
 
 /* ---------------- nav ---------------- */
 $$('.nav-item').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-$$('[data-goto]').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.goto)));
+// delegated so any [data-goto] button added later (e.g. empty-state CTAs) works without rebinding
+document.addEventListener('click', (e) => {
+  const gotoBtn = e.target.closest('[data-goto]');
+  if(gotoBtn) switchTab(gotoBtn.dataset.goto);
+});
 $('#menu-toggle').addEventListener('click', () => openSidebar());
 $('#sidebar-overlay').addEventListener('click', () => closeSidebar());
 
@@ -889,6 +994,16 @@ function closeSidebar(){
   $('#sidebar').classList.remove('open');
   $('#sidebar-overlay').classList.remove('show');
 }
+
+/* ---------------- collapsible sidebar (desktop icon-only mode) ---------------- */
+const LS_SIDEBAR_COLLAPSED = 'ledger_sidebar_collapsed';
+function setSidebarCollapsed(collapsed){
+  $('#sidebar').classList.toggle('collapsed', collapsed);
+  localStorage.setItem(LS_SIDEBAR_COLLAPSED, collapsed ? '1' : '0');
+}
+$('#sidebar-collapse-btn').addEventListener('click', () => setSidebarCollapsed(true));
+$('#sidebar-expand-btn').addEventListener('click', () => setSidebarCollapsed(false));
+setSidebarCollapsed(localStorage.getItem(LS_SIDEBAR_COLLAPSED) === '1');
 
 const TAB_TITLES = {overview:'Overview', log:'New trade', history:'History', analytics:'Analytics', mindset:'Mindset', settings:'Settings'};
 function switchTab(tab){
@@ -907,6 +1022,39 @@ $('#f-emotion-group').addEventListener('click', (e) => {
   chip.classList.add('selected');
   selectedEmotion = chip.dataset.emotion;
 });
+
+/* ---------------- direction / session pills ---------------- */
+$('#f-dir-group').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  $$('#f-dir-group .chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+  selectedDirection = chip.dataset.dir;
+});
+$('#f-session-group').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  $$('#f-session-group .chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+  selectedSession = chip.dataset.session;
+});
+
+/* ---------------- R:R auto-suggestion ---------------- */
+function updateRRHint(){
+  const hint = $('#f-rr-hint');
+  if(!hint) return;
+  const entry = parseFloat($('#f-entry').value);
+  const sl = parseFloat($('#f-sl').value);
+  const tp = parseFloat($('#f-tp').value);
+  if(isFinite(entry) && isFinite(sl) && isFinite(tp) && entry !== sl){
+    const risk = Math.abs(entry - sl);
+    const reward = Math.abs(tp - entry);
+    hint.textContent = risk ? `Suggested R:R ≈ ${(reward / risk).toFixed(2)} (from entry/SL/TP)` : 'R:R —';
+  } else {
+    hint.textContent = 'R:R —';
+  }
+}
+['f-entry','f-sl','f-tp'].forEach(id => $('#'+id).addEventListener('input', updateRRHint));
 
 /* ---------------- accounts ---------------- */
 
@@ -1032,19 +1180,38 @@ function fmtNum(n){
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function emptyState(msg){ return `<div class="empty">${msg}</div>`; }
+const EMOTION_TONE = {
+  Confident:'badge-buy', Calm:'badge-buy',
+  Anxious:'badge-sell', FOMO:'badge-sell', Revenge:'badge-sell', Impatient:'badge-sell',
+  Bored:'badge-neutral'
+};
+function emotionBadge(emotion){
+  if(!emotion) return '<span style="color:var(--text-muted);">—</span>';
+  const cls = EMOTION_TONE[emotion] || 'badge-neutral';
+  return `<span class="badge ${cls}">${escapeHtml(emotion)}</span>`;
+}
+
+function emptyState(msg, ctaLabel){
+  return `<div class="empty">
+    <p style="margin-bottom:${ctaLabel ? '14px' : '0'};">${msg}</p>
+    ${ctaLabel ? `<button class="btn btn-accent" data-goto="log">${ctaLabel}</button>` : ''}
+  </div>`;
+}
 
 /* ---------------- form ---------------- */
 function resetForm(){
   editingId = null;
   selectedEmotion = null;
+  selectedDirection = 'Buy';
+  selectedSession = 'London';
   $('#log-panel-title').textContent = 'Log a trade';
   $('#cancel-edit-btn').style.display = 'none';
   ['f-pair','f-entry','f-exit','f-sl','f-tp','f-lots','f-pnl','f-commission','f-swap','f-fees','f-screenshot','f-strategy','f-notes'].forEach(id => $('#'+id).value = '');
   $('#f-date').value = new Date().toISOString().slice(0,10);
-  $('#f-dir').value = 'Buy';
-  $('#f-session').value = 'London';
+  $$('#f-dir-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.dir === 'Buy'));
+  $$('#f-session-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.session === 'London'));
   $$('#f-emotion-group .chip').forEach(c => c.classList.remove('selected'));
+  updateRRHint();
   // keep selected account from sidebar switcher as default
   const switcherAcc = $('#account-switcher').value;
   populateAccountSelects(switcherAcc || null);
@@ -1072,7 +1239,7 @@ $('#save-trade-btn').addEventListener('click', () => {
     id: editingId || (Date.now().toString(36) + Math.random().toString(36).slice(2,7)),
     date: $('#f-date').value || new Date().toISOString().slice(0,10),
     account: accountId,
-    pair, direction: $('#f-dir').value, session: $('#f-session').value,
+    pair, direction: selectedDirection, session: selectedSession,
     entry, exit, sl, tp, rr,
     lots: parseFloat($('#f-lots').value) || null,
     pnl,
@@ -1106,8 +1273,10 @@ function editTrade(id){
   populateAccountSelects(t.account || null);
   $('#f-date').value    = t.date;
   $('#f-pair').value    = t.pair;
-  $('#f-dir').value     = t.direction;
-  $('#f-session').value = t.session;
+  selectedDirection = t.direction;
+  selectedSession   = t.session;
+  $$('#f-dir-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.dir === t.direction));
+  $$('#f-session-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.session === t.session));
   $('#f-entry').value   = t.entry  ?? '';
   $('#f-exit').value    = t.exit   ?? '';
   $('#f-sl').value      = t.sl     ?? '';
@@ -1122,6 +1291,7 @@ function editTrade(id){
   $('#f-notes').value   = t.notes || '';
   selectedEmotion = t.emotion;
   $$('#f-emotion-group .chip').forEach(c => c.classList.toggle('selected', c.dataset.emotion === t.emotion));
+  updateRRHint();
   switchTab('log');
 }
 
@@ -1196,7 +1366,7 @@ function renderOverview(){
 
   const wrap   = $('#ov-recent-wrap');
   const recent = [...trades].reverse().slice(0,6);
-  if(!recent.length){ wrap.innerHTML = emptyState('No trades logged yet.'); return; }
+  if(!recent.length){ wrap.innerHTML = emptyState('No trades logged yet.', 'Log your first trade'); return; }
   wrap.innerHTML = simpleTable(recent);
 }
 
@@ -1257,7 +1427,7 @@ function drawEquityCurve(){
     svg.innerHTML = '';
     yAxis.innerHTML = '';
     xAxis.innerHTML = '';
-    statsRow.innerHTML = '';
+    statsRow.innerHTML = emptyState('No trades yet — your equity curve will appear here once you log one.', 'Log your first trade');
     tooltip.classList.remove('show');
     return;
   }
@@ -1498,16 +1668,16 @@ function renderHistory(){
     const net = netOf(t), fees = feesOf(t);
     return `<tr>
       <td>${t.date}</td>
-      <td class="name-cell">${acc ? escapeHtml(acc.name) : '—'}</td>
+      <td class="name-cell cell-muted">${acc ? escapeHtml(acc.name) : '—'}</td>
       <td class="name-cell">${escapeHtml(t.pair)}</td>
       <td><span class="badge ${t.direction==='Buy'?'badge-buy':'badge-sell'}">${t.direction}</span></td>
       <td class="num">${t.entry ?? '—'}</td>
       <td class="num">${t.exit  ?? '—'}</td>
       <td class="num">${t.lots  ?? '—'}</td>
       <td class="num ${t.pnl>=0?'pos-txt':'neg-txt'}">${fmtMoney(t.pnl)}</td>
-      <td class="num">${fees ? fmtMoney(-fees) : '—'}</td>
+      <td class="num cell-muted">${fees ? fmtMoney(-fees) : '—'}</td>
       <td class="num ${net>=0?'pos-txt':'neg-txt'}">${fmtMoney(net)}</td>
-      <td class="name-cell">${t.emotion ? escapeHtml(t.emotion) : '—'}</td>
+      <td>${emotionBadge(t.emotion)}</td>
       <td>${chartLink(t)}</td>
       <td style="white-space:nowrap;">
         <button class="btn-danger-text" style="color:var(--text-secondary);margin-right:10px;" onclick="editTrade('${t.id}')">Edit</button>
@@ -1532,7 +1702,7 @@ function renderHistory(){
         <span>${t.date}</span>
         <span>${acc ? escapeHtml(acc.name) : '—'}</span>
         ${fees ? `<span>Fees ${fmtMoney(-fees)}</span>` : ''}
-        ${t.emotion ? `<span>${escapeHtml(t.emotion)}</span>` : ''}
+        ${t.emotion ? emotionBadge(t.emotion) : ''}
       </div>
       <div class="trade-card-meta" style="margin-top:4px;">
         <span>Entry ${t.entry ?? '—'}</span>
