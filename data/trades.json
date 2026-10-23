@@ -1380,6 +1380,29 @@
       "emotion": "Confident",
       "notes": "",
       "createdAt": 1789022850960
+    },
+    {
+      "id": "mvl42y7sqnkn7",
+      "date": "2026-10-07",
+      "account": "acc_mtv5xdem",
+      "pair": "XPDUSD",
+      "direction": "Buy",
+      "session": "London",
+      "entry": 1134.08,
+      "exit": 1049.86,
+      "sl": 1049.86,
+      "tp": 1380.87,
+      "rr": 2.9303015910710033,
+      "lots": 0.01,
+      "pnl": 84.22,
+      "commission": 0,
+      "swap": 0,
+      "fees": 0,
+      "screenshot": "https://www.tradingview.com/x/hD4PqBB9/",
+      "strategy": "COT EXTREME BULLISH, TECHNICALS NOT IN FAVOR, AGGRESSIVEW ENTRY WITHOUT CONFIRMATION.",
+      "emotion": "Confident",
+      "notes": "",
+      "createdAt": 1792768508344
     }
   ],
   "accounts": [
